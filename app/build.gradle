@@ -1,0 +1,32 @@
+plugins {
+    id 'java'
+    id 'application'
+    id 'org.openjfx.javafxplugin' version '0.1.0' // Plugin oficial para JavaFX
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Para guardar y cargar los "cerebros" de la IA
+    implementation 'com.google.code.gson:gson:2.10.1'
+    
+    // Para pruebas unitarias de vectores y matemáticas
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.9.1'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+javafx {
+    version = "17.0.6" // Asegura compatibilidad con JDK 17
+    modules = [ 'javafx.controls', 'javafx.graphics' ]
+}
+
+application {
+    // El punto de entrada definido en tu paquete principal
+    mainClass = 'main.Main'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}

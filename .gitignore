@@ -1,0 +1,25 @@
+# .gitignore
+# Compilación y Gradle
+.gradle/
+build/
+out/
+bin/
+
+# IDEs
+.idea/
+*.iml
+*.iws
+.vscode/
+
+# SO
+.DS_Store
+Thumbs.db
+
+# Ignore Gradle project-specific cache directory
+.gradle
+
+# Ignore Gradle build output directory
+build
+
+# Ignore Kotlin plugin data
+.kotlin
