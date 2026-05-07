@@ -7,13 +7,16 @@ import javafx.animation.AnimationTimer;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.Scene;
+import javafx.scene.image.Image;
+import javafx.scene.image.PixelReader;
 import javafx.scene.input.KeyCode;
 import javafx.scene.paint.Color;
-import javafx.scene.image.Image;
 import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
 
 import java.util.Objects;
 import model.Vehiculo;
+import model.Sensor;
 
 public class Simulador {
     private final Canvas canvas;
@@ -28,7 +31,9 @@ public class Simulador {
 
         imagenPista = new Image(Objects.requireNonNull(getClass().getResourceAsStream("/pista.png")), 800, 600, false, true);
 
-        poblacion = new Poblacion(400, 400);
+        double[] spawnPoint = Sensor.encontrarSpawnPoint();
+        System.out.println("Spawn dinamico detectado en: (" + spawnPoint[0] + ", " + spawnPoint[1] + ")");
+        poblacion = new Poblacion(spawnPoint[0], spawnPoint[1]);
 
         initTimer();
 
@@ -52,21 +57,20 @@ public class Simulador {
                 poblacion.update();
                 poblacion.render(gc);
 
-                renderHUD();
-
                 if (poblacion.todosMuertos()) {
                     poblacion.siguienteGeneracion();
                 }
+
+                gc.setEffect(null);
+                gc.setGlobalAlpha(1.0);
+                gc.setStroke(Color.YELLOW);
+                gc.setFill(Color.YELLOW);
+                gc.setFont(Font.font("Monospaced", FontWeight.BOLD, 16));
+                gc.fillText("GEN: " + poblacion.getGeneracion(), 700, 20);
+                gc.fillText("VIVOS: " + poblacion.getVehiculosVivos(), 700, 40);
+                gc.fillText("FIT: " + Math.round(poblacion.getMejorFitness()), 700, 60);
             }
         };
-    }
-
-    private void renderHUD() {
-        gc.setFill(Color.BLACK);
-        gc.setFont(new Font(18));
-        gc.fillText("Generacion: " + poblacion.getGeneracion(), 20, 30);
-        gc.fillText("Autos Vivos: " + poblacion.getVehiculosVivos(), 20, 50);
-        gc.fillText("Mejor Fitness: " + Math.round(poblacion.getMejorFitness()), 20, 70);
     }
 
     public void start() {

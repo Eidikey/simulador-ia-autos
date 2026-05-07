@@ -13,9 +13,10 @@ public class Sensor {
     private double ultimoY;
     private double origenX;
     private double origenY;
-    private static final Image PISTA;
-    private static final PixelReader PIXEL_READER;
+    static final Image PISTA;
+    static final PixelReader PIXEL_READER;
     private static final double MAX_DISTANCIA = 300.0;
+    private boolean metaDetectada;
 
     static {
         Image img = null;
@@ -39,6 +40,7 @@ public class Sensor {
         this.ultimoY = 0;
         this.origenX = 0;
         this.origenY = 0;
+        this.metaDetectada = false;
     }
 
     public double medirDistancia(double origenX, double origenY, double anguloVehiculo) {
@@ -54,6 +56,7 @@ public class Sensor {
         double y = origenY;
         ultimoX = x;
         ultimoY = y;
+        metaDetectada = false;
 
         while (distancia < MAX_DISTANCIA) {
             x += dx * 2;
@@ -62,7 +65,12 @@ public class Sensor {
 
             if (PIXEL_READER != null && x >= 0 && x < PISTA.getWidth() && y >= 0 && y < PISTA.getHeight()) {
                 Color pixelColor = PIXEL_READER.getColor((int) x, (int) y);
-                if (pixelColor.getRed() == 0 && pixelColor.getGreen() == 0 && pixelColor.getBlue() == 0) {
+                // Wall detection (black) - more lenient
+                if (pixelColor.getRed() < 0.1 && pixelColor.getGreen() < 0.1 && pixelColor.getBlue() < 0.1) {
+                    break;
+                } else if (pixelColor.getRed() > 0.9 && pixelColor.getGreen() < 0.1 && pixelColor.getBlue() < 0.1) {
+                    // Finish line (red)
+                    metaDetectada = true;
                     break;
                 }
             } else {
@@ -76,6 +84,10 @@ public class Sensor {
         return distancia / MAX_DISTANCIA;
     }
 
+    public boolean isMetaDetectada() {
+        return metaDetectada;
+    }
+
     public void render(GraphicsContext gc) {
         gc.setStroke(Color.YELLOW);
         gc.strokeLine(origenX, origenY, ultimoX, ultimoY);
@@ -83,5 +95,41 @@ public class Sensor {
 
     public double getUltimaDistancia() {
         return ultimaDistancia / MAX_DISTANCIA;
+    }
+
+    public static double[] encontrarSpawnPoint() {
+        if (PIXEL_READER == null || PISTA == null) {
+            System.err.println("ERROR: PIXEL_READER o PISTA es null");
+            return new double[]{400.0, 500.0};
+        }
+
+        // Search for BLUE spawn line pixels - search ENTIRE image
+        double bestBlue = 0;
+        int bestX = 400, bestY = 500;
+        int count = 0;
+        
+        // Search entire image for blue pixels (spawn line)
+        for (int y = 0; y < PISTA.getHeight(); y++) {
+            for (int x = 0; x < PISTA.getWidth(); x++) {
+                Color c = PIXEL_READER.getColor(x, y);
+                // Blue spawn: B > 0.5 and R < 0.5 and G < 0.5
+                if (c.getBlue() > 0.5 && c.getRed() < 0.5 && c.getGreen() < 0.5) {
+                    if (c.getBlue() > bestBlue) {
+                        bestBlue = c.getBlue();
+                        bestX = x;
+                        bestY = y;
+                    }
+                    count++;
+                }
+            }
+        }
+        
+        if (count > 0) {
+            // Use the bluest pixel as spawn point
+            return new double[]{bestX, bestY};
+        }
+        
+        // Last resort: use a reasonable default
+        return new double[]{400.0, 500.0};
     }
 }

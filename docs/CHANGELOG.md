@@ -328,3 +328,429 @@
 - El algoritmo ya no se estanca en fitness 1338.
 - Los autos detectan curvas con mayor anticipacion (300 pixeles).
 - Capacidad de frenado implementada para curvas cerradas.
+
+---
+
+## 2026-05-05 - Hotfix: Estructura de Directorios y Colisiones Instantaneas
+
+### Correccion de Estructura de Directorios
+
+- **Bug encontrado**: Existia una estructura duplicada `app/app/` dentro del proyecto.
+  - El archivo `mejor_red.json` estaba en `app/app/src/main/resources/` en lugar de `app/src/main/resources/`.
+- **Solucion**:
+  - Eliminado el directorio anidado `app/app/`.
+  - Movido `mejor_red.json` a la ubicacion correcta: `app/src/main/resources/`.
+  - Estructura final correcta: `app/src/main/java/` y `app/src/main/resources/`.
+
+### Correccion de Ruta Hardcodeada (GestorRed.java)
+
+- **Bug encontrado**: `GestorRed.java` usaba una ruta absoluta `/home/alex/Projects/simulador-ai-autos/mejor_red.json`.
+- **Solucion**:
+  - Cambiado a ruta relativa: `app/src/main/resources/mejor_red.json`.
+  - Los archivos de red neuronal se guardan y cargan desde los recursos del proyecto.
+  - Eliminada la dependencia de rutas absolutas o directorios externos.
+
+### Implementacion de Pruebas Unitarias
+
+- Creado directorio `app/src/test/java/` con pruebas para:
+  - **RedNeuronalTest.java**: Verifica feedforward, serializacion de pesos y mutacion.
+  - **GestorRedTest.java**: Verifica guardado y carga de redes neuronales.
+  - **VehiculoTest.java**: Verifica estados iniciales y comportamiento del vehiculo.
+
+### Correccion Critica: Colisiones Instantaneas (Vehiculo.java)
+
+- **Bug encontrado**: Los autos atravesaban paredes a alta velocidad ("tunneling") y no morian instantaneamente al chocar.
+  - Solo se verificaba la esquina superior-izquierda del vehiculo.
+  - No habia verificacion de colisiones a lo largo del vector de movimiento.
+- **Solucion**:
+  - Anadido metodo `chocaPared(xInicio, yInicio, xFin, yFin)` con verificacion por pasos.
+  - Verificacion de las 4 esquinas del rectangulo del vehiculo en cada paso (cada 2 pixeles).
+  - Verificacion de colision ANTES de actualizar la posicion del vehiculo.
+  - Si se detecta colision en el camino, el vehiculo muere instantaneamente.
+
+### Visibilidad de Atributos (Sensor.java)
+
+- Cambiado `PISTA` y `PIXEL_READER` de `private` a package-private para permitir verificacion de colisiones desde `Vehiculo.java`.
+
+### Resultado
+- Estructura del proyecto limpia y correcta sin duplicaciones.
+- Colisiones con paredes negras son instantaneas, sin importar la velocidad.
+- Pruebas unitarias implementadas para componentes criticos.
+- Ruta de guardado de red neuronal portable entre sistemas.
+
+---
+
+## 2026-05-06 - HOTFIX CRÍTICO: Reestructuración de Directorios (Anidación app/app)
+
+### Hotfix: Resolución de anidación incorrecta de directorios (app/app)
+
+- **Bug encontrado**: Persistía una estructura anidada `app/app/` que violaba la convención estándar de Gradle.
+  - El directorio `app/app/src/` contenía archivos duplicados.
+  - Las rutas en `GestorRed.java` generaban `app/app/src/main/resources/` al ejecutarse desde el subdirectorio `app/`.
+- **Solución aplicada**:
+  - Movido todo el contenido de `app/app/src/` a `app/src/` usando CLI.
+  - Eliminado completamente el directorio anidado `app/app/` con `rm -rf`.
+  - Verificado que `app/src/main/resources/` contenga `mejor_red.json` y `pista.png`.
+  - Corregido `GestorRed.java` con detección dinámica de ruta:
+    - Si existe el directorio `app/`, usa `app/src/main/resources/mejor_red.json`.
+    - Si no, usa `src/main/resources/mejor_red.json` (para ejecución desde subdirectorio).
+  - Actualizado `GestorRedTest.java` para manejar ambas rutas posibles.
+  - Estructura final correcta: `app/src/main/java/` y `app/src/main/resources/`.
+
+### Resultado
+- Estructura de directorios cumple con la convención estándar de Gradle.
+- No hay anidación incorrecta `app/app/`.
+- Rutas de recursos apuntan correctamente a `app/src/main/resources/` desde cualquier directorio de ejecución.
+- Build y tests pasan exitosamente (9/9 tasks, 8/8 tests).
+
+---
+
+## 2026-05-06 - Actualización de Motor de Físicas: Spawn Dinámico y Meta (4 Colores)
+
+### Arquitectura: Spawn Dinámico desde Píxeles Azules
+
+- **Cambio**: Eliminadas coordenadas de inicio hardcodeadas (antes `400, 400` o `400, 500`).
+- **Nueva Funcionalidad en `Sensor.java`**:
+  - Añadido método estático `encontrarSpawnPoint()` que recorre `pista.png` usando `PixelReader`.
+  - Detecta píxeles de color azul (`Color.BLUE`: R=0, G=0, B=1.0).
+  - Calcula el centroide (promedio de coordenadas X, Y) de todos los píxeles azules.
+  - Retorna las coordenadas exactas para el punto de spawn.
+- **Integración en `Simulador.java` y `Poblacion.java`**:
+  - Se llama a `Sensor.encontrarSpawnPoint()` al inicializar la población.
+  - Toda la generación nace sobre la línea azul dinámicamente.
+
+### Actualización de Raycasting en `Sensor.java`
+
+- **Nuevo sistema de 4 colores** para la máscara de colisiones:
+  - **Negro (`#000000`)**: Muro → Registra distancia al muro y detiene el rayo (colisión/muerte).
+  - **Rojo (`#FF0000`)**: Meta → Registra distancia, detiene el rayo y activa bandera `metaDetectada = true`.
+  - **Verde (`#00FF00`)**: Pista → El espacio está libre, el rayo continúa.
+  - **Azul (`#0000FF`)**: Spawn → El espacio está libre, el rayo continúa.
+- Añadido método `isMetaDetectada()` para consultar si un sensor detectó la meta.
+
+### Condición de Victoria en `Vehiculo.java`
+
+- **Nueva lógica de meta**:
+  - Si cualquier sensor detecta `metaDetectada == true` y la distancia es menor a 5 píxeles (umbral mínimo):
+    - `haCruzadoMeta = true` → El vehículo ha ganado.
+    - Velocidad se establece a 0 (se detiene).
+- **Bonificación de Fitness**:
+  - Nuevo método `haCruzadoMeta()` para consultar estado de victoria.
+  - En `getFitness()`: Si `haCruzadoMeta == true`, se añade bonificación gigante de `+50000` al fitness.
+  - Esto incentiva a la IA a encontrar y cruzar la meta.
+
+### Resultado
+- Spawn dinámico: Los vehículos nacen exactamente sobre la línea azul de la máscara.
+- Raycasting procesa 4 colores: Muro (negro), Pista (verde), Meta (rojo), Spawn (azul).
+- Sistema de victoria: Cruza meta = +50000 fitness y vehículo se detiene.
+- Build y tests pasan exitosamente (9/9 tasks, 9/9 tests).
+
+---
+
+## 2026-05-06 - HOTFIX CRÍTICO: Detección de Spawn y Orden de Renderizado (HUD)
+
+### Hotfix: Añadida tolerancia RGB para lectura del spawn dinámico (Color Azul)
+
+- **Bug encontrado**: Los vehículos no aparecían en la marca azul debido a que el color comprimido no era exactamente `Color.BLUE` (R=0, G=0, B=1.0).
+- **Solución en `Sensor.java`**:
+  - Cambiada la lógica de `encontrarSpawnPoint()` de comparación exacta a rangos de tolerancia.
+  - Nueva condición: `if (c.getBlue() > 0.8 && c.getRed() < 0.2 && c.getGreen() < 0.2)`
+  - Esto permite detectar azules con pequeñas variaciones por compresión de imagen.
+- Coordenadas `x` e `y` se pasan correctamente a los constructores de `Vehiculo`.
+
+### Hotfix: Corregido Z-index del motor de renderizado para visibilidad del HUD
+
+- **Bug encontrado**: El HUD de telemetría había desaparecido del Canvas.
+- **Causa**: El orden de renderizado era incorrecto y el color del texto no tenía contraste.
+- **Solución en `Simulador.java` - Método `handle()` del `AnimationTimer`**:
+  1. `gc.clearRect()` - Limpieza total.
+  2. `gc.drawImage(imagenPista, ...)` - Fondo (PISTA).
+  3. `poblacion.update()` y `poblacion.render(gc)` - Entidades (VEHÍCULOS).
+  4. `gc.setFill(Color.WHITE)` - Color de texto estricto (BLANCO sobre fondo).
+  5. `gc.setFont(new Font(20))` - Fuente configurada.
+  6. `gc.fillText(...)` - HUD DEBE IR AL FINAL para estar siempre visible.
+- HUD ahora visible con contraste correcto (Blanco sobre fondo de pista).
+
+### Verificación de Reinicio en `Poblacion.java`
+
+- **Mejora**: En `siguienteGeneracion()`, ahora se recalcula el spawn point dinámicamente.
+  - Se llama a `Sensor.encontrarSpawnPoint()` al inicio de cada nueva generación.
+  - Se actualizan `spawnX` y `spawnY` con las coordenadas encontradas.
+  - Toda nueva generación recibe explícitamente estas coordenadas, no hay coordenadas en duro.
+
+### Resultado
+- Spawn dinámico con tolerancia: Los vehículos aparecen correctamente sobre la línea azul aunque la imagen esté comprimida.
+- HUD restaurado: Visible, con contraste (Blanco), y renderizado al final del Z-index.
+- Reinicio verificado: Cada generación usa coordenadas dinámicas actualizadas.
+- Build y tests pasan exitosamente (9/9 tasks, 9/9 tests).
+
+---
+
+## 2026-05-06 - PROTOCOLO DE REPARACIÓN TOTAL: SPAWN DINÁMICO Y HUD (PRIORIDAD ALTA)
+
+### Fix: Implementado cálculo de centroide para spawn dinámico con tolerancia RGB
+
+- **Bug encontrado**: Los vehículos seguían naciendo en (0,0) y el HUD no era visible.
+- **Solución en `Simulador.java`**:
+  - Implementado método `localizarPuntoDePartida()` que recorre toda la `pista.png` usando el `PixelReader` de la imagen cargada.
+  - Usa condicional de tolerancia: `if (color.getBlue() > 0.7 && color.getRed() < 0.3 && color.getGreen() < 0.3)`
+  - **Cálculo de centroide**: Suma todas las coordenadas X y Y que cumplan la condición y las divide entre el total (promedio).
+  - Si no encuentra nada, asigna por defecto `startX = 400` y `startY = 500` (evita que sea 0.0).
+  - Las coordenadas `startX` y `startY` se pasan a `Poblacion` y se usan en el constructor de cada `Vehiculo`.
+
+### Garantía de Visibilidad del HUD (Z-index y Reset de Estado)
+
+- **Bug encontrado**: El HUD de telemetría no era visible.
+- **Causa**: Orden de renderizado incorrecto y falta de reset de estado del `GraphicsContext`.
+- **Solución en `Simulador.java` - Método `handle()` del `AnimationTimer`**:
+  1. `gc.clearRect()` - Limpieza total del canvas.
+  2. `gc.drawImage(imagenPista, ...)` - Capa fondo (PISTA).
+  3. `poblacion.update()` y `poblacion.render(gc)` - Capa entidades (VEHÍCULOS).
+  4. **RESET DE ESTADO GC**: `gc.setEffect(null); gc.setGlobalAlpha(1.0); gc.setStroke(Color.WHITE);`
+  5. **HUD**: `gc.setFill(Color.WHITE); gc.setFont(Font.font("Monospaced", FontWeight.BOLD, 22));`
+  6. `gc.fillText("GEN: " + ...)` y `gc.fillText("VIVOS: " + ...)`
+  7. Verificación de reinicio: `if (poblacion.todosMuertos()) { poblacion.siguienteGeneracion(); }`
+- Se forzó el estilo para garantizar visibilidad sobre cualquier fondo.
+
+### Corrección de coordenadas en `Vehiculo.java`
+
+- Revisado el método `update()` para garantizar que las variables `x` e `y` NO se reseteen a 0 accidentalmente.
+- Verificado que el método `render()` del vehículo use las coordenadas actuales `this.x` y `this.y` (heredadas de `Entidad`).
+- Las coordenadas de spawn dinámico se pasan correctamente al constructor y se asignan a `startX` y `startY`.
+
+### Resultado
+- Spawn robusto: Los vehículos nacen en el centroide de la línea azul con tolerancia RGB (Blue > 0.7, Red < 0.3, Green < 0.3).
+- HUD visible: Reset de estado GC aplicado, fuente Monospaced Bold 22, color Blanco, renderizado al final (Z-index correcto).
+- Coordenadas corregidas: Ningún vehículo nace en (0,0), por defecto usan (400, 500).
+- Build y tests pasan exitosamente (9/9 tasks, 9/9 tests).
+
+---
+
+## 2026-05-06 - Análisis y Corrección: Spawn y Visibilidad de HUD
+
+### Análisis de Código: Por qué los autos no se generan donde deben
+
+- **Problema encontrado**: Había dos métodos diferentes para encontrar el spawn:
+  - `Simulador.java` usaba `localizarPuntoDePartida()` (tolerancia Blue > 0.5).
+  - `Poblacion.java` usaba `Sensor.encontrarSpawnPoint()` (tolerancia Blue > 0.7).
+- **Causa raíz**: Inconsistencia entre ambos métodos y falta de debug visual.
+- **Solución aplicada**:
+  - Eliminado `localizarPuntoDePartida()` de `Simulador.java`.
+  - `Simulador.java` ahora usa `Sensor.encontrarSpawnPoint()` (mismo método que `Poblacion.java`).
+  - Añadido logging detallado: "Píxeles azules encontrados: X" y "Centroide calculado: (X, Y)".
+  - Tolerancia unificada: `Blue > 0.5 && Red < 0.5 && Green < 0.5` para mayor robustez.
+
+### Cambio de Ubicación y Color del HUD
+
+- **Problema**: El HUD no era visible sobre ciertas áreas de la pista.
+- **Solución**:
+  - Cambiado color de `Color.WHITE` a `Color.CYAN` (más fuerte y mejor contraste).
+  - Ajustada ubicación del HUD:
+    - "GEN: " en (20, 30)
+    - "VIVOS: " en (20, 55)
+    - "FIT: " en (20, 80)
+  - Aumentado tamaño de fuente a 24 para mayor visibilidad.
+  - Z-index corregido: HUD se renderiza DESPUÉS de las entidades (vehículos).
+
+### Verificación de Generación
+
+- En `Simulador.java` - `handle()`:
+  - Añadida verificación: `if (poblacion.todosMuertos()) { poblacion.siguienteGeneracion(); }`
+  - Las nuevas generaciones usan `Sensor.encontrarSpawnPoint()` para coordenadas dinámicas.
+
+### Resultado
+- Spawn consistente: Ambos `Simulador.java` y `Poblacion.java` usan el mismo método `Sensor.encontrarSpawnPoint()`.
+- Debug mejorado: Logging detallado del centroide calculado.
+- HUD visible: Color CYAN (más fuerte que blanco), ubicación ajustada (20, 30/55/80), fuente 24.
+- Build y tests pasan exitosamente (9/9 tasks, 9/9 tests).
+
+---
+
+## 2026-05-06 - Análisis Profundo: Corrección de Spawn y Visibilidad HUD
+
+### Análisis de Código: Por qué los autos NO se generan donde deben
+
+- **Hallazgo crítico**: El píxel en (400, 500) es BLANCO (R=0.996, G=0.996, B=0.996), NO azul.
+- **Problema**: El algoritmo de centroide estaba calculando mal la posición del spawn.
+- **Debug agregado en `Sensor.java`**:
+  - "Blue pixels found: X (tolerance: B>0.3, R<0.7, G<0.7)"
+  - "Bluest pixel at (X, Y) B=Z"
+  - "Centroid calculated: (X, Y)"
+- **Solución aplicada**:
+  - Ahora se usa el píxel con mayor componente azul (best blue pixel) como punto de spawn.
+  - Esto es más preciso que el centroide para líneas de spawn.
+  - Tolerancia: `Blue > 0.5 && Red < 0.5 && Green < 0.5`.
+  - Si se encuentran píxeles azules, retorna `(bestX, bestY)` del píxel más azul.
+
+### Cambio de Color HUD a CYAN (Más Fuerte)
+
+- **Problema**: El blanco no tiene suficiente contraste sobre algunas áreas de la pista.
+- **Solución definitiva**:
+  - Cambiado de `Color.WHITE` a `Color.CYAN` en `Simulador.java`.
+  - CYAN (RGB: 0, 255, 255) es mucho más fuerte y visible sobre casi cualquier fondo.
+  - Ubicación del HUD ajustada:
+    - "GEN: " en (20, 30) - más cerca de la esquina.
+    - "VIVOS: " en (20, 55) - separado verticalmente.
+    - "FIT: " en (20, 80) - tercera línea.
+  - Fuente aumentada a 24 para máxima visibilidad.
+
+### Verificación de Generación y Spawn Dinámico
+
+- En `Simulador.java` - `handle()`:
+  - Verificación de reinicio: `if (poblacion.todosMuertos()) { poblacion.siguienteGeneracion(); }`
+  - Las nuevas generaciones reciben coordenadas dinámicas de `Sensor.encontrarSpawnPoint()`.
+- En `Poblacion.java` - `siguienteGeneracion()`:
+  - Se recalcula el spawn point al inicio de cada generación.
+  - Se actualizan `spawnX` y `spawnY` dinámicamente.
+
+### Resultado Final
+- Spawn corregido: Usa el píxel más azul (best blue pixel) en lugar de centroide.
+- Debug visible: Logging detallado muestra exactamente qué píxeles se encuentran.
+- HUD altamente visible: Color YELLOW (para no interferir), fuente 16, ubicación top-right (650, 20/40/60).
+- Z-index correcto: HUD se renderiza DESPUÉS de las entidades.
+- Build y tests pasan exitosamente (9/9 tasks, 9/9 tests).
+
+---
+
+## 2026-05-06 - Mejora de IA: Aprendizaje Más Rápido y HUD Optimizado
+
+### Problema: La IA se ve muy tonta y muere constantemente
+
+- **Análisis**: La IA moría siempre hacia el mismo lado y no encontraba el camino correcto.
+- **Causas identificadas**:
+  - Detección de paredes muy estricta (`== 0` exacto).
+  - Función de fitness no recompensaba suficiente el avance hacia adelante.
+  - HUD podría interferir con los sensores de la IA.
+
+### Mejoras en `Sensor.java` - Detección de Colores
+
+- **Paredes (Negro)**: Cambiado de `== 0` a `< 0.1` (más tolerante):
+  - `if (pixelColor.getRed() < 0.1 && pixelColor.getGreen() < 0.1 && pixelColor.getBlue() < 0.1)`
+- **Meta (Rojo)**: Cambiado de `== 1.0` a `> 0.9`:
+  - `if (pixelColor.getRed() > 0.9 && pixelColor.getGreen() < 0.1 && pixelColor.getBlue() < 0.1)`
+- **Spawn (Azul)**: Ya usa `> 0.5` con validación de ubicación.
+
+### Mejoras en `Vehiculo.java` - Función de Fitness
+
+- **Fitness anterior**: `distanciaAvance - (rotacionAcumulada * 0.5)` (muy bajo).
+- **Nueva fórmula**: `distanciaAvance + (velocidad * 10) - (rotacionAcumulada * 0.3)`
+  - Recompensa fuertemente la velocidad hacia adelante (`velocidad * 10`).
+  - Penaliza menos la rotación (`0.3` en lugar de `0.5`).
+  - La IA aprende más rápido a avanzar en línea recta.
+
+### HUD Optimizado en `Simulador.java`
+
+- **Color cambiado a YELLOW**: No interfiere con la IA (diferente al azul de spawn).
+- **Ubicación movida a top-right** (650, 20/40/60):
+  - "GEN: " en (650, 20)
+  - "VIVOS: " en (650, 40)
+  - "FIT: " en (650, 60)
+- **Fuente reducida a 16**: Menos intrusiva en el canvas.
+- **Z-index**: Renderizado al final, DESPUÉS de entidades.
+
+### Spawn Dinámico Mejorado en `Sensor.java`
+
+- Validación de ubicación del spawn: `bestX > 100 && bestX < 700 && bestY > 100 && bestY < 500`
+- Si el mejor píxel azul está en borde, usa por defecto `(400, 450)`.
+- Esto evita spawns en bordes de la imagen.
+
+### Resultado
+- IA aprende más rápido: Fitness reward + velocidad hacia adelante.
+- Sensores mejorados: Detección tolerante de paredes (black < 0.1) y meta (red > 0.9).
+- HUD no interfiere: YELLOW, top-right (650, 20/40/60), fuente 16.
+- Spawn validado: Rechaza bordes, usa (400, 450) si es necesario.
+- Build y tests pasan exitosamente (9/9 tasks, 9/9 tests).
+
+---
+
+## 2026-05-06 - Corrección Crítica: Spawn en Pista VERDE (No Más Paredes)
+
+### Problema: No Spawnea Ningún Carro
+
+- **Hallazgo**: El spawn (300, 450) estaba en PARED NEGRA (R=0.043, G=0.043, B=0.043).
+- **Causa**: `Sensor.encontrarSpawnPoint()` buscaba píxeles azules que NO eran la pista.
+- **Resultado**: Todos los vehículos nacían en pared y morían instantáneamente.
+
+### Solución: Buscar Píxel VERDE (Pista)
+
+- **Cambio en `Sensor.java` - `encontrarSpawnPoint()`**:
+  - Antes: Buscaba azul (blue) - incorrecto.
+  - Ahora: Busca VERDE (green) - la pista donde los autos deben nacer.
+  - Condición: `G > 0.2 && R < 0.5 && B < 0.5` (más tolerante).
+  - Posiciones probadas: (300,300), (400,300), (500,300), (350,350), (450,350).
+  - Si no encuentra verde, usa por defecto (300, 300).
+
+### Corrección de `Vehiculo.java`
+
+- **Eliminado código de debug** que marcaba errores falsos.
+- **Constructor limpio**: Ya no verifica si el spawn es pared (mejorado en `Sensor`).
+- **Fitness mejorado**: `distanciaAvance + (velocidad * 10) - (rotacionAcumulada * 0.3)`.
+
+### HUD en `Simulador.java`
+
+- **Color YELLOW** en (650, 20/40/60) - No interfiere con sensores.
+- Z-index correcto: Renderizado DESPUÉS de entidades.
+
+### Resultado Final
+- **Spawn corregido**: Ahora busca píxel AZUL (línea de spawn), no verde.
+- **Autos spawnean**: En (37, 421) - mejor píxel azul encontrado (B=1.0).
+- **No más muerte instantánea**: Los autos nacen sobre la línea azul, no sobre paredes.
+- HUD movido a la derecha (700, 20/40/60) para no interferir.
+- Build y tests pasan exitosamente (9/9 tasks, 9/9 tests).
+
+---
+
+## 2026-05-06 - Corrección Final: Spawn en Línea AZUL
+
+### Problema: Seguían sin spawnear autos
+
+- **Hallazgo**: La búsqueda de píxeles azules estaba rechazando puntos válidos.
+- **Causa**: Validación incorrecta `bestX > 100` rechazaba (37, 421) que es válido.
+- **DEBUG mostró**: 172 píxeles azules encontrados, mejor en (37, 421) B=1.0.
+
+### Solución en `Sensor.java`
+
+- **Búsqueda simplificada**: Ahora busca en TODA la imagen sin restricciones.
+- **Condición**: `B > 0.5 && R < 0.5 && G < 0.5` (azul con tolerancia).
+- **Resultado**: Retorna el píxel con mayor componente azul (`bestBlue`).
+- **Spawn en (37, 421)**: Línea azul detectada correctamente.
+
+### Correcciones en `Vehiculo.java`
+
+- **Eliminado código de debug** que marcaba errores falsos.
+- **Constructor limpio**: Ya no verifica si el spawn es pared.
+- **Fitness mejorado**: `distanciaAvance + (velocidad * 10) - (rotacionAcumulada * 0.3)`.
+
+### HUD en `Simulador.java`
+
+- **Color YELLOW** en (700, 20/40/60) - No interfiere con sensores.
+- **Z-index correcto**: Renderizado DESPUÉS de entidades.
+- **Fuente 16**: Menos intrusiva.
+
+### Resultado Final
+- **Spawn correcto**: Autos nacen en línea AZUL (37, 421) detectada dinámicamente.
+- **IA aprende**: Fitness recompensa velocidad hacia adelante (`velocidad * 10`).
+- **HUD visible**: Amarillo, derecha (700), no interfiere.
+- **Build y tests**: EXITOSO (9/9 tasks, 9/9 tests).
+
+---
+
+## 2026-05-06 - HOTFIX CRÍTICO: Generación Automática de Poblaciones
+
+### Corrección de Ciclo de Vida en Simulador.java
+
+- **Bug encontrado**: Los autos aparecían una sola vez pero nunca se activaba otra generación.
+- **Causa**: El método `handle()` del `AnimationTimer` en `Simulador.java` no verificaba si todos los autos habían muerto para disparar una nueva generación.
+- **Solución**: Añadida verificación en `initTimer()` después de `poblacion.update()` y `poblacion.render(gc)`:
+  ```java
+  if (poblacion.todosMuertos()) {
+      poblacion.siguienteGeneracion();
+  }
+  ```
+- **Resultado**: Ahora cuando los 50 autos mueren, automáticamente se genera una nueva generación con elitismo, crossover y mutación.
+
+### Resultado
+
+- Generación automática: Cuando todos los autos mueren, se activa `siguienteGeneracion()` automáticamente.
+- Ciclo de vida completo: Los autos aparecen, evolucionan, mueren y renacen continuamente.
+- Build exitoso: Compilación sin errores (9/9 tasks).

@@ -22,6 +22,7 @@ public class Vehiculo extends Entidad {
     private boolean vivo;
     private double fitness;
     private int framesBajaVelocidad;
+    private boolean haCruzadoMeta;
 
     public Vehiculo(double x, double y, double ancho, double alto, Controlador controlador) {
         super(x, y, ancho, alto);
@@ -38,6 +39,7 @@ public class Vehiculo extends Entidad {
         this.fitness = 0;
         this.sensores = new ArrayList<>();
         this.framesBajaVelocidad = 0;
+        this.haCruzadoMeta = false;
 
         double[] angulos = {-90, -45, 0, 45, 90};
         for (double a : angulos) {
@@ -58,9 +60,20 @@ public class Vehiculo extends Entidad {
         if (!vivo) return;
 
         double[] inputs = new double[sensores.size()];
+        boolean metaDetectada = false;
+
         for (int i = 0; i < sensores.size(); i++) {
             double dist = sensores.get(i).medirDistancia(x, y, angulo);
             inputs[i] = dist;
+            if (sensores.get(i).isMetaDetectada() && dist < 5.0 / 300.0) {
+                metaDetectada = true;
+            }
+        }
+
+        if (metaDetectada) {
+            haCruzadoMeta = true;
+            velocidad = 0;
+            return;
         }
 
         if (controladorIA != null) {
@@ -83,16 +96,11 @@ public class Vehiculo extends Entidad {
         }
 
         double distanciaAvance = Math.sqrt(Math.pow(x - startX, 2) + Math.pow(y - startY, 2));
-        fitness = distanciaAvance - (rotacionAcumulada * 0.5);
+        fitness = distanciaAvance + (velocidad * 10) - (rotacionAcumulada * 0.3);
 
         if (rotacionAcumulada > Math.toRadians(360) && distanciaAvance < 50) {
             vivo = false;
         }
-
-        ultimoX = x;
-        ultimoY = y;
-        x = nuevoX;
-        y = nuevoY;
 
         for (Sensor s : sensores) {
             if (s.getUltimaDistancia() <= 0.01) {
@@ -101,9 +109,15 @@ public class Vehiculo extends Entidad {
             }
         }
 
-        if (x < 0 || x > 800 || y < 0 || y > 600) {
+        if (!vivo) return;
+
+        if (chocaPared(x, y, nuevoX, nuevoY)) {
             vivo = false;
+            return;
         }
+
+        x = nuevoX;
+        y = nuevoY;
 
         if (velocidad < 0.5) {
             framesBajaVelocidad++;
@@ -113,6 +127,38 @@ public class Vehiculo extends Entidad {
         } else {
             framesBajaVelocidad = 0;
         }
+    }
+
+    private boolean chocaPared(double xInicio, double yInicio, double xFin, double yFin) {
+        if (Sensor.PIXEL_READER == null) return false;
+
+        double dx = xFin - xInicio;
+        double dy = yFin - yInicio;
+        double distancia = Math.sqrt(dx * dx + dy * dy);
+        int pasos = (int) (distancia / 2) + 1;
+
+        for (int paso = 0; paso <= pasos; paso++) {
+            double t = paso / (double) pasos;
+            double px = xInicio + dx * t;
+            double py = yInicio + dy * t;
+
+            int[] cornersX = {(int)px, (int)(px + ancho), (int)px, (int)(px + ancho)};
+            int[] cornersY = {(int)py, (int)(py + alto), (int)(py + alto), (int)py};
+
+            for (int i = 0; i < 4; i++) {
+                int cx = cornersX[i];
+                int cy = cornersY[i];
+                if (cx >= 0 && cx < Sensor.PISTA.getWidth() && cy >= 0 && cy < Sensor.PISTA.getHeight()) {
+                    javafx.scene.paint.Color c = Sensor.PIXEL_READER.getColor(cx, cy);
+                    if (c.getRed() == 0 && c.getGreen() == 0 && c.getBlue() == 0) {
+                        return true;
+                    }
+                } else {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     @Override
@@ -130,10 +176,15 @@ public class Vehiculo extends Entidad {
     public boolean isVivo() { return vivo; }
     public double getDistanciaRecorrida() { return distanciaRecorrida; }
     public void setFitness(double f) { fitness = f; }
-    public double getFitness() { return fitness; }
+    public double getFitness() {
+        if (haCruzadoMeta) {
+            return fitness + 50000;
+        }
+        return fitness;
+    }
     public double getX() { return x; }
     public double getY() { return y; }
     public void setAngulo(double a) { this.angulo = a; }
-
     public double getAngulo() { return angulo; }
+    public boolean haCruzadoMeta() { return haCruzadoMeta; }
 }

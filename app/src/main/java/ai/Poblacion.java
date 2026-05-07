@@ -1,6 +1,7 @@
 package ai;
 
 import model.Controlador;
+import model.Sensor;
 import model.Vehiculo;
 
 import java.util.ArrayList;
@@ -26,9 +27,13 @@ public class Poblacion {
         this.generacion = 1;
         this.vehiculos = new ArrayList<>();
         this.rand = new Random();
-        this.spawnX = inicioX;
-        this.spawnY = inicioY;
+
+        double[] spawnPoint = Sensor.encontrarSpawnPoint();
+        this.spawnX = spawnPoint[0];
+        this.spawnY = spawnPoint[1];
         this.recordFitness = 0;
+
+        System.out.println("Spawn dinamico detectado en: (" + spawnX + ", " + spawnY + ")");
 
         RedNeuronal redCargada = GestorRed.cargarMejorRed();
         if (redCargada != null) {
@@ -108,6 +113,10 @@ public class Poblacion {
         } else {
             generacionesEstancadas++;
         }
+
+        double[] spawnPoint = Sensor.encontrarSpawnPoint();
+        this.spawnX = spawnPoint[0];
+        this.spawnY = spawnPoint[1];
 
         List<Vehiculo> nuevaGeneracion = new ArrayList<>();
 
