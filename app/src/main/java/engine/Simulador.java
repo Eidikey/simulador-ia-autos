@@ -43,6 +43,11 @@ public class Simulador {
                 GestorRed.guardarRed(((ControladorIA) mejor.getControladorIA()).getRed());
                 System.out.println("Red guardada manualmente!");
             }
+            if (e.getCode() == KeyCode.A) {
+                Vehiculo mejor = poblacion.getVehiculos().get(0);
+                ControladorIA ctrl = (ControladorIA) mejor.getControladorIA();
+                ctrl.imprimirAuditoriaMatricial();
+            }
         });
     }
 

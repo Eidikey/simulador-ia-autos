@@ -56,6 +56,57 @@ public class RedNeuronal {
         return salidas;
     }
 
+    public void auditarTransformacionLineal(double[] inputs, double[] salidas) {
+        System.out.printf("%n");
+        System.out.printf("  ╔══════════════════════════════════════════════════════════════╗%n");
+        System.out.printf("  ║       AUDITORÍA MATRICIAL — TRANSFORMACIÓN LINEAL           ║%n");
+        System.out.printf("  ╚══════════════════════════════════════════════════════════════╝%n%n");
+
+        System.out.printf("  [X] Vector de Entrada  (%d × 1)%n", numEntradas);
+        String sepHorizX = "  ┌" + "──────────────┬".repeat(numEntradas - 1) + "──────────────┐%n";
+        String sepMedioX = "  ├" + "──────────────┼".repeat(numEntradas - 1) + "──────────────┤%n";
+        String sepFinX   = "  └" + "──────────────┴".repeat(numEntradas - 1) + "──────────────┘%n";
+        System.out.printf(sepHorizX);
+        System.out.printf("  │");
+        for (int i = 0; i < numEntradas; i++) {
+            System.out.printf("      %7.4f      │", inputs[i]);
+        }
+        System.out.printf("%n");
+        System.out.printf(sepFinX);
+        System.out.printf("%n");
+
+        System.out.printf("  [W] Matriz de Pesos (Capa Entrada→Oculta)  (%d × %d)%n", numEntradas, numOcultas);
+        String sepHorizW = "  ┌" + "──────────────┬".repeat(numOcultas - 1) + "──────────────┐%n";
+        String sepMedioW = "  ├" + "──────────────┼".repeat(numOcultas - 1) + "──────────────┤%n";
+        String sepFinW   = "  └" + "──────────────┴".repeat(numOcultas - 1) + "──────────────┘%n";
+        System.out.printf(sepHorizW);
+        for (int i = 0; i < numEntradas; i++) {
+            if (i > 0) System.out.printf(sepMedioW);
+            System.out.printf("  │");
+            for (int j = 0; j < numOcultas; j++) {
+                System.out.printf("      %7.4f      │", pesosEntradaOculta[i][j]);
+            }
+            System.out.printf("%n");
+        }
+        System.out.printf(sepFinW);
+        System.out.printf("%n");
+
+        System.out.printf("  [Y] Vector de Salida  (%d × 1)%n", numSalidas);
+        String sepHorizY = "  ┌" + "──────────────┬".repeat(numSalidas - 1) + "──────────────┐%n";
+        String sepFinY   = "  └" + "──────────────┴".repeat(numSalidas - 1) + "──────────────┘%n";
+        System.out.printf(sepHorizY);
+        System.out.printf("  │");
+        for (int i = 0; i < numSalidas; i++) {
+            System.out.printf("      %7.4f      │", salidas[i]);
+        }
+        System.out.printf("%n");
+        System.out.printf(sepFinY);
+        System.out.printf("%n");
+
+        System.out.printf("  Operación:  Y = σ(X · W₁) · W₂   (escalada a [-1, 1])%n");
+        System.out.printf("  ─────────────────────────────────────────────────────%n%n");
+    }
+
     public double[] getPesosComoArray() {
         int total = (numEntradas * numOcultas) + (numOcultas * numSalidas);
         double[] array = new double[total];

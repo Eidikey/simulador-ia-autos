@@ -5,6 +5,7 @@ import model.Controlador;
 public class ControladorIA implements Controlador {
     private final RedNeuronal red;
     private double[] ultimasSalidas;
+    private double[] ultimosInputs;
 
     public ControladorIA(RedNeuronal red) {
         this.red = red;
@@ -22,7 +23,16 @@ public class ControladorIA implements Controlador {
     }
 
     public void procesar(double[] inputs) {
+        this.ultimosInputs = inputs.clone();
         ultimasSalidas = red.feedForward(inputs);
+    }
+
+    public void imprimirAuditoriaMatricial() {
+        if (ultimosInputs == null || ultimasSalidas == null) {
+            System.out.println("  [Auditoría] No hay datos de la última propagación.");
+            return;
+        }
+        red.auditarTransformacionLineal(ultimosInputs, ultimasSalidas);
     }
 
     public RedNeuronal getRed() {
