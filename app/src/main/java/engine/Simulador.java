@@ -23,7 +23,7 @@ public class Simulador {
     private final GraphicsContext gc;
     private final Image imagenPista;
     private Poblacion poblacion;
-    private AnimationTimer timer;
+    private AnimationTimer temporizador;
 
     public Simulador(Canvas canvas, Scene scene) {
         this.canvas = canvas;
@@ -31,11 +31,11 @@ public class Simulador {
 
         imagenPista = new Image(Objects.requireNonNull(getClass().getResourceAsStream("/pista.png")), 800, 600, false, true);
 
-        double[] spawnPoint = Sensor.encontrarSpawnPoint();
-        System.out.println("Spawn dinamico detectado en: (" + spawnPoint[0] + ", " + spawnPoint[1] + ")");
-        poblacion = new Poblacion(spawnPoint[0], spawnPoint[1]);
+        double[] puntoInicio = Sensor.encontrarPuntoInicio();
+        System.out.println("Punto de inicio detectado en: (" + puntoInicio[0] + ", " + puntoInicio[1] + ")");
+        poblacion = new Poblacion(puntoInicio[0], puntoInicio[1]);
 
-        initTimer();
+        iniciarTemporizador();
 
         scene.setOnKeyPressed(e -> {
             if (e.getCode() == KeyCode.G) {
@@ -45,22 +45,22 @@ public class Simulador {
             }
             if (e.getCode() == KeyCode.A) {
                 Vehiculo mejor = poblacion.getVehiculos().get(0);
-                ControladorIA ctrl = (ControladorIA) mejor.getControladorIA();
-                ctrl.imprimirAuditoriaMatricial();
+                ControladorIA controlador = (ControladorIA) mejor.getControladorIA();
+                controlador.imprimirAuditoriaMatricial();
             }
         });
     }
 
-    private void initTimer() {
-        timer = new AnimationTimer() {
+    private void iniciarTemporizador() {
+        temporizador = new AnimationTimer() {
             @Override
             public void handle(long now) {
                 gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
 
                 gc.drawImage(imagenPista, 0, 0, canvas.getWidth(), canvas.getHeight());
 
-                poblacion.update();
-                poblacion.render(gc);
+                poblacion.actualizar();
+                poblacion.dibujar(gc);
 
                 if (poblacion.todosMuertos()) {
                     poblacion.siguienteGeneracion();
@@ -73,16 +73,16 @@ public class Simulador {
                 gc.setFont(Font.font("Monospaced", FontWeight.BOLD, 16));
                 gc.fillText("GEN: " + poblacion.getGeneracion(), 700, 20);
                 gc.fillText("VIVOS: " + poblacion.getVehiculosVivos(), 700, 40);
-                gc.fillText("FIT: " + Math.round(poblacion.getMejorFitness()), 700, 60);
+                gc.fillText("FIT: " + Math.round(poblacion.obtenerMejorAptitud()), 700, 60);
             }
         };
     }
 
     public void start() {
-        timer.start();
+        temporizador.start();
     }
 
     public void stop() {
-        timer.stop();
+        temporizador.stop();
     }
 }

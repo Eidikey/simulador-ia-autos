@@ -15,45 +15,45 @@ public class Poblacion {
     private final int tamanoPoblacion;
     private int generacion;
     private int vehiculosVivos;
-    private double mejorFitness;
-    private Random rand;
-    private double spawnX = 400.0;
-    private double spawnY = 500.0;
-    private double recordFitness = 0;
+    private double mejorAptitud;
+    private Random aleatorio;
+    private double inicioX = 400.0;
+    private double inicioY = 500.0;
+    private double recordAptitud = 0;
     private int generacionesEstancadas = 0;
 
     public Poblacion(double inicioX, double inicioY) {
         this.tamanoPoblacion = 50;
         this.generacion = 1;
         this.vehiculos = new ArrayList<>();
-        this.rand = new Random();
+        this.aleatorio = new Random();
 
-        double[] spawnPoint = Sensor.encontrarSpawnPoint();
-        this.spawnX = spawnPoint[0];
-        this.spawnY = spawnPoint[1];
-        this.recordFitness = 0;
+        double[] puntoInicio = Sensor.encontrarPuntoInicio();
+        this.inicioX = puntoInicio[0];
+        this.inicioY = puntoInicio[1];
+        this.recordAptitud = 0;
 
-        System.out.println("Spawn dinamico detectado en: (" + spawnX + ", " + spawnY + ")");
+        System.out.println("Inicio dinamico detectado en: (" + inicioX + ", " + inicioY + ")");
 
         RedNeuronal redCargada = GestorRed.cargarMejorRed();
         if (redCargada != null) {
             System.out.println("Red pre-entrenada cargada exitosamente.");
-            crearPoblacionConRed(spawnX, spawnY, redCargada);
+            crearPoblacionConRed(inicioX, inicioY, redCargada);
         } else {
-            crearPoblacion(spawnX, spawnY);
+            crearPoblacion(inicioX, inicioY);
         }
     }
 
     private void crearPoblacion(double x, double y) {
         for (int i = 0; i < tamanoPoblacion; i++) {
-            RedNeuronal red = new RedNeuronal(5, 4, 2);
+            RedNeuronal red = new RedNeuronal(6, 4, 2);
             ControladorIA controlador = new ControladorIA(red);
             Vehiculo v = new Vehiculo(x, y, 40, 20, controlador);
             v.setControladorIA(controlador);
             vehiculos.add(v);
         }
         vehiculosVivos = tamanoPoblacion;
-        mejorFitness = 0;
+        mejorAptitud = 0;
     }
 
     private void crearPoblacionConRed(double x, double y, RedNeuronal redBase) {
@@ -64,7 +64,7 @@ public class Poblacion {
         vehiculos.add(elite);
 
         for (int i = 1; i < tamanoPoblacion; i++) {
-            RedNeuronal redClon = new RedNeuronal(5, 4, 2);
+            RedNeuronal redClon = new RedNeuronal(6, 4, 2);
             redClon.setPesosDesdeArray(redBase.getPesosComoArray());
             redClon.mutar(0.1);
             ControladorIA ci = new ControladorIA(redClon);
@@ -74,26 +74,26 @@ public class Poblacion {
             vehiculos.add(v);
         }
         vehiculosVivos = tamanoPoblacion;
-        mejorFitness = 0;
+        mejorAptitud = 0;
     }
 
-    public void update() {
+    public void actualizar() {
         vehiculosVivos = 0;
         for (Vehiculo v : vehiculos) {
-            if (v.isVivo()) {
-                v.update();
+            if (v.estaVivo()) {
+                v.actualizar();
                 vehiculosVivos++;
-                if (v.getDistanciaRecorrida() > mejorFitness) {
-                    mejorFitness = v.getDistanciaRecorrida();
+                if (v.getDistanciaRecorrida() > mejorAptitud) {
+                    mejorAptitud = v.getDistanciaRecorrida();
                 }
             }
         }
     }
 
-    public void render(javafx.scene.canvas.GraphicsContext gc) {
+    public void dibujar(javafx.scene.canvas.GraphicsContext gc) {
         for (Vehiculo v : vehiculos) {
-            if (v.isVivo()) {
-                v.render(gc);
+            if (v.estaVivo()) {
+                v.dibujar(gc);
             }
         }
     }
@@ -103,51 +103,60 @@ public class Poblacion {
     }
 
     public void siguienteGeneracion() {
-        evaluarFitness();
+        evaluarAptitud();
 
-        if (mejorFitness > recordFitness) {
-            recordFitness = mejorFitness;
+        if (mejorAptitud > recordAptitud) {
+            recordAptitud = mejorAptitud;
             generacionesEstancadas = 0;
             GestorRed.guardarRed(((ControladorIA) vehiculos.get(0).getControladorIA()).getRed());
-            System.out.println("Nuevo récord! Fitness: " + recordFitness + " (Guardado automatico)");
+            System.out.println("Nuevo record! Aptitud: " + recordAptitud + " (Guardado automatico)");
         } else {
             generacionesEstancadas++;
         }
 
-        double[] spawnPoint = Sensor.encontrarSpawnPoint();
-        this.spawnX = spawnPoint[0];
-        this.spawnY = spawnPoint[1];
+        double[] puntoInicio = Sensor.encontrarPuntoInicio();
+        this.inicioX = puntoInicio[0];
+        this.inicioY = puntoInicio[1];
 
         List<Vehiculo> nuevaGeneracion = new ArrayList<>();
 
-        crossover(nuevaGeneracion);
-        mutacion(nuevaGeneracion, generacionesEstancadas > 5 ? 0.4 : 0.1);
+        int numElite = (int) Math.ceil(tamanoPoblacion * 0.10);
+        int numCaos = (int) Math.floor(tamanoPoblacion * 0.20);
+        int numRecombinacion = tamanoPoblacion - numElite - numCaos;
+
+        agregarElites(nuevaGeneracion, numElite);
+        cruzar(nuevaGeneracion, numRecombinacion);
+        agregarInmigrantes(nuevaGeneracion, numCaos);
 
         vehiculos.clear();
         vehiculos.addAll(nuevaGeneracion);
         vehiculosVivos = vehiculos.size();
         generacion++;
-        mejorFitness = 0;
+        mejorAptitud = 0;
     }
 
-    private void evaluarFitness() {
+    private void evaluarAptitud() {
         for (Vehiculo v : vehiculos) {
-            v.setFitness(v.getDistanciaRecorrida());
+            v.establecerAptitud(v.getDistanciaRecorrida());
         }
-        vehiculos.sort((v1, v2) -> Double.compare(v2.getFitness(), v1.getFitness()));
+        vehiculos.sort((v1, v2) -> Double.compare(v2.obtenerAptitud(), v1.obtenerAptitud()));
     }
 
-    private void crossover(List<Vehiculo> nuevaGeneracion) {
-        Vehiculo mejor = vehiculos.get(0);
-        RedNeuronal redElite = new RedNeuronal(5, 4, 2);
-        redElite.setPesosDesdeArray(((ControladorIA) mejor.getControladorIA()).getRed().getPesosComoArray());
-        ControladorIA ciElite = new ControladorIA(redElite);
-        Vehiculo elite = new Vehiculo(spawnX, spawnY, 40, 20, ciElite);
-        elite.setAngulo(0);
-        elite.setControladorIA(ciElite);
-        nuevaGeneracion.add(elite);
+    private void agregarElites(List<Vehiculo> lista, int cantidad) {
+        for (int i = 0; i < cantidad && i < vehiculos.size(); i++) {
+            Vehiculo original = vehiculos.get(i);
+            RedNeuronal redClon = new RedNeuronal(6, 4, 2);
+            redClon.setPesosDesdeArray(((ControladorIA) original.getControladorIA()).getRed().getPesosComoArray());
+            ControladorIA ci = new ControladorIA(redClon);
+            Vehiculo elite = new Vehiculo(inicioX, inicioY, 40, 20, ci);
+            elite.setAngulo(0);
+            elite.setControladorIA(ci);
+            lista.add(elite);
+        }
+    }
 
-        for (int i = 1; i < tamanoPoblacion; i++) {
+    private void cruzar(List<Vehiculo> lista, int cantidad) {
+        for (int i = 0; i < cantidad; i++) {
             Vehiculo padre1 = seleccionarPadre();
             Vehiculo padre2 = seleccionarPadre();
 
@@ -155,35 +164,39 @@ public class Poblacion {
             double[] pesos2 = ((ControladorIA) padre2.getControladorIA()).getRed().getPesosComoArray();
             double[] hijo = new double[pesos1.length];
 
-            int puntoCruce = rand.nextInt(pesos1.length);
+            int puntoCruce = aleatorio.nextInt(pesos1.length);
             for (int j = 0; j < pesos1.length; j++) {
                 hijo[j] = j < puntoCruce ? pesos1[j] : pesos2[j];
             }
 
-            RedNeuronal redHijo = new RedNeuronal(5, 4, 2);
+            RedNeuronal redHijo = new RedNeuronal(6, 4, 2);
             redHijo.setPesosDesdeArray(hijo);
             redHijo.mutar(0.1);
             ControladorIA ci = new ControladorIA(redHijo);
-            Vehiculo nv = new Vehiculo(spawnX, spawnY, 40, 20, ci);
-            nv.setAngulo(0);
-            nv.setControladorIA(ci);
-            nuevaGeneracion.add(nv);
+            Vehiculo vehiculoNuevo = new Vehiculo(inicioX, inicioY, 40, 20, ci);
+            vehiculoNuevo.setAngulo(0);
+            vehiculoNuevo.setControladorIA(ci);
+            lista.add(vehiculoNuevo);
         }
     }
 
-    private void mutacion(List<Vehiculo> poblacion, double tasaMutacion) {
-        for (int i = 1; i < poblacion.size(); i++) {
-            ControladorIA ci = (ControladorIA) poblacion.get(i).getControladorIA();
-            ci.getRed().mutar(tasaMutacion);
+    private void agregarInmigrantes(List<Vehiculo> lista, int cantidad) {
+        for (int i = 0; i < cantidad; i++) {
+            RedNeuronal redNueva = new RedNeuronal(6, 4, 2);
+            ControladorIA ci = new ControladorIA(redNueva);
+            Vehiculo inmigrante = new Vehiculo(inicioX, inicioY, 40, 20, ci);
+            inmigrante.setAngulo(0);
+            inmigrante.setControladorIA(ci);
+            lista.add(inmigrante);
         }
     }
 
     private Vehiculo seleccionarPadre() {
-        double totalFitness = vehiculos.stream().mapToDouble(Vehiculo::getFitness).sum();
-        double r = rand.nextDouble() * totalFitness;
+        double aptitudTotal = vehiculos.stream().mapToDouble(Vehiculo::obtenerAptitud).sum();
+        double r = aleatorio.nextDouble() * aptitudTotal;
         double acumulado = 0;
         for (Vehiculo v : vehiculos) {
-            acumulado += v.getFitness();
+            acumulado += v.obtenerAptitud();
             if (acumulado >= r) return v;
         }
         return vehiculos.get(0);
@@ -192,6 +205,6 @@ public class Poblacion {
     public int getGeneracion() { return generacion; }
     public int getVehiculosVivos() { return vehiculosVivos; }
     public int getTotal() { return tamanoPoblacion; }
-    public double getMejorFitness() { return mejorFitness; }
+    public double obtenerMejorAptitud() { return mejorAptitud; }
     public List<Vehiculo> getVehiculos() { return vehiculos; }
 }

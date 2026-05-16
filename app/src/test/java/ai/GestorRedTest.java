@@ -31,7 +31,7 @@ public class GestorRedTest {
 
     @Test
     void testGuardarYCargarRed() {
-        RedNeuronal redOriginal = new RedNeuronal(5, 4, 2);
+        RedNeuronal redOriginal = new RedNeuronal(6, 4, 2);
         GestorRed.guardarRed(redOriginal);
 
         RedNeuronal redCargada = GestorRed.cargarMejorRed();

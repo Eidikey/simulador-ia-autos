@@ -18,28 +18,27 @@ public class InspectImage {
             Color defaultSpawn = pr.getColor(400, 500);
             System.out.println("Default spawn (400,500) - R:" + defaultSpawn.getRed() + " G:" + defaultSpawn.getGreen() + " B:" + defaultSpawn.getBlue());
             
-            // Search for blue pixels (spawn line)
-            int blueCount = 0;
-            double bestBlue = 0;
-            int bestX = 0, bestY = 0;
+            int contadorAzul = 0;
+            double mejorAzul = 0;
+            int mejorX = 0, mejorY = 0;
             for (int y = 0; y < img.getHeight(); y++) {
                 for (int x = 0; x < img.getWidth(); x++) {
                     Color c = pr.getColor(x, y);
                     if (c.getBlue() > 0.5 && c.getRed() < 0.5 && c.getGreen() < 0.5) {
-                        blueCount++;
-                        if (c.getBlue() > bestBlue) {
-                            bestBlue = c.getBlue();
-                            bestX = x;
-                            bestY = y;
+                        contadorAzul++;
+                        if (c.getBlue() > mejorAzul) {
+                            mejorAzul = c.getBlue();
+                            mejorX = x;
+                            mejorY = y;
                         }
                     }
                 }
             }
-            System.out.println("Blue spawn pixels found: " + blueCount);
-            if (blueCount > 0) {
-                System.out.println("Best blue pixel at: (" + bestX + "," + bestY + ") B:" + bestBlue);
-                Color bestPixel = pr.getColor(bestX, bestY);
-                System.out.println("Best pixel color - R:" + bestPixel.getRed() + " G:" + bestPixel.getGreen() + " B:" + bestPixel.getBlue());
+            System.out.println("Pixeles azules de inicio encontrados: " + contadorAzul);
+            if (contadorAzul > 0) {
+                System.out.println("Mejor pixel azul en: (" + mejorX + "," + mejorY + ") B:" + mejorAzul);
+                Color mejorPixel = pr.getColor(mejorX, mejorY);
+                System.out.println("Color del mejor pixel - R:" + mejorPixel.getRed() + " G:" + mejorPixel.getGreen() + " B:" + mejorPixel.getBlue());
             }
             
             // Check if best spawn point is on track (green) or wall (black)

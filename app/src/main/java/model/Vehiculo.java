@@ -14,13 +14,13 @@ public class Vehiculo extends Entidad {
     private ControladorIA controladorIA;
     private final List<Sensor> sensores;
     private double distanciaRecorrida;
-    private double startX;
-    private double startY;
+    private double inicioX;
+    private double inicioY;
     private double rotacionAcumulada;
     private double ultimoX;
     private double ultimoY;
     private boolean vivo;
-    private double fitness;
+    private double aptitud;
     private int framesBajaVelocidad;
     private boolean haCruzadoMeta;
 
@@ -30,13 +30,13 @@ public class Vehiculo extends Entidad {
         this.angulo = 0;
         this.controlador = controlador;
         this.distanciaRecorrida = 0;
-        this.startX = x;
-        this.startY = y;
+        this.inicioX = x;
+        this.inicioY = y;
         this.rotacionAcumulada = 0;
         this.ultimoX = x;
         this.ultimoY = y;
         this.vivo = true;
-        this.fitness = 0;
+        this.aptitud = 0;
         this.sensores = new ArrayList<>();
         this.framesBajaVelocidad = 0;
         this.haCruzadoMeta = false;
@@ -56,16 +56,16 @@ public class Vehiculo extends Entidad {
     }
 
     @Override
-    public void update() {
+    public void actualizar() {
         if (!vivo) return;
 
-        double[] inputs = new double[sensores.size()];
+        double[] entradas = new double[sensores.size() + 1];
         boolean metaDetectada = false;
 
         for (int i = 0; i < sensores.size(); i++) {
             double dist = sensores.get(i).medirDistancia(x, y, angulo);
-            inputs[i] = dist;
-            if (sensores.get(i).isMetaDetectada() && dist < 5.0 / 300.0) {
+            entradas[i] = dist;
+            if (sensores.get(i).esMetaDetectada() && dist < 5.0 / Sensor.MAX_DISTANCIA) {
                 metaDetectada = true;
             }
         }
@@ -76,8 +76,15 @@ public class Vehiculo extends Entidad {
             return;
         }
 
+        double[] meta = Sensor.obtenerCoordenadasMeta();
+        double dxMeta = meta[0] - x;
+        double dyMeta = meta[1] - y;
+        double normMeta = Math.sqrt(dxMeta * dxMeta + dyMeta * dyMeta);
+        double cosDireccion = (Math.cos(angulo) * dxMeta + Math.sin(angulo) * dyMeta) / normMeta;
+        entradas[5] = cosDireccion;
+
         if (controladorIA != null) {
-            controladorIA.procesar(inputs);
+            controladorIA.procesar(entradas);
         }
 
         double aceleracion = controlador.obtenerAceleracion();
@@ -95,8 +102,13 @@ public class Vehiculo extends Entidad {
             distanciaRecorrida += avance;
         }
 
-        double distanciaAvance = Math.sqrt(Math.pow(x - startX, 2) + Math.pow(y - startY, 2));
-        fitness = distanciaAvance + (velocidad * 10) - (rotacionAcumulada * 0.3);
+        double distanciaAvance = Math.sqrt(Math.pow(x - inicioX, 2) + Math.pow(y - inicioY, 2));
+        double desplazamientoY = inicioY - y;
+        double penalizacionRotacion = rotacionAcumulada * 0.8;
+        double penalizacionQuieto = (framesBajaVelocidad > 20) ? (framesBajaVelocidad * 10.0) : 0.0;
+        double penalizacionRetroceso = (desplazamientoY < 0) ? Math.abs(desplazamientoY) * 10.0 : 0.0;
+        aptitud = (distanciaAvance * 2.0) + (velocidad * 15.0) + Math.max(desplazamientoY * 5.0, 0)
+                - penalizacionRotacion - penalizacionQuieto - penalizacionRetroceso;
 
         if (rotacionAcumulada > Math.toRadians(360) && distanciaAvance < 50) {
             vivo = false;
@@ -130,7 +142,7 @@ public class Vehiculo extends Entidad {
     }
 
     private boolean chocaPared(double xInicio, double yInicio, double xFin, double yFin) {
-        if (Sensor.PIXEL_READER == null) return false;
+        if (Sensor.LECTOR_PIXELES == null) return false;
 
         double dx = xFin - xInicio;
         double dy = yFin - yInicio;
@@ -142,14 +154,14 @@ public class Vehiculo extends Entidad {
             double px = xInicio + dx * t;
             double py = yInicio + dy * t;
 
-            int[] cornersX = {(int)px, (int)(px + ancho), (int)px, (int)(px + ancho)};
-            int[] cornersY = {(int)py, (int)(py + alto), (int)(py + alto), (int)py};
+            int[] esquinasX = {(int)px, (int)(px + ancho), (int)px, (int)(px + ancho)};
+            int[] esquinasY = {(int)py, (int)(py + alto), (int)(py + alto), (int)py};
 
             for (int i = 0; i < 4; i++) {
-                int cx = cornersX[i];
-                int cy = cornersY[i];
+                int cx = esquinasX[i];
+                int cy = esquinasY[i];
                 if (cx >= 0 && cx < Sensor.PISTA.getWidth() && cy >= 0 && cy < Sensor.PISTA.getHeight()) {
-                    javafx.scene.paint.Color c = Sensor.PIXEL_READER.getColor(cx, cy);
+                    javafx.scene.paint.Color c = Sensor.LECTOR_PIXELES.getColor(cx, cy);
                     if (c.getRed() == 0 && c.getGreen() == 0 && c.getBlue() == 0) {
                         return true;
                     }
@@ -162,7 +174,7 @@ public class Vehiculo extends Entidad {
     }
 
     @Override
-    public void render(GraphicsContext gc) {
+    public void dibujar(GraphicsContext gc) {
         if (!vivo) return;
 
         gc.setFill(Color.web("#00FFCC"));
@@ -173,14 +185,14 @@ public class Vehiculo extends Entidad {
         }
     }
 
-    public boolean isVivo() { return vivo; }
+    public boolean estaVivo() { return vivo; }
     public double getDistanciaRecorrida() { return distanciaRecorrida; }
-    public void setFitness(double f) { fitness = f; }
-    public double getFitness() {
+    public void establecerAptitud(double a) { aptitud = a; }
+    public double obtenerAptitud() {
         if (haCruzadoMeta) {
-            return fitness + 50000;
+            return aptitud + 50000;
         }
-        return fitness;
+        return aptitud;
     }
     public double getX() { return x; }
     public double getY() { return y; }

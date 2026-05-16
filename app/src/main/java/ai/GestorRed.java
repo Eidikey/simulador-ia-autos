@@ -31,11 +31,17 @@ public class GestorRed {
     }
 
     public static RedNeuronal cargarMejorRed() {
+        int pesosEsperados = 6 * 4 + 4 * 2;
         File archivo = new File(RUTA_ARCHIVO);
         if (archivo.exists()) {
             try (Reader reader = new FileReader(archivo)) {
                 double[] pesos = gson.fromJson(reader, double[].class);
-                RedNeuronal red = new RedNeuronal(5, 4, 2);
+                if (pesos == null || pesos.length != pesosEsperados) {
+                    System.out.println("Formato de red antiguo o corrupto (" + (pesos == null ? 0 : pesos.length)
+                            + " pesos, se esperaban " + pesosEsperados + "). Se ignora el archivo.");
+                    return null;
+                }
+                RedNeuronal red = new RedNeuronal(6, 4, 2);
                 red.setPesosDesdeArray(pesos);
                 System.out.println("Red pre-entrenada cargada desde " + archivo.getAbsolutePath());
                 return red;

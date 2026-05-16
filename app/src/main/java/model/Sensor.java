@@ -14,8 +14,10 @@ public class Sensor {
     private double origenX;
     private double origenY;
     static final Image PISTA;
-    static final PixelReader PIXEL_READER;
-    private static final double MAX_DISTANCIA = 300.0;
+    static final PixelReader LECTOR_PIXELES;
+    static final double MAX_DISTANCIA = 420.0;
+    private static double metaX = -1;
+    private static double metaY = -1;
     private boolean metaDetectada;
 
     static {
@@ -30,7 +32,7 @@ public class Sensor {
             System.err.println("Error al cargar pista.png: " + e.getMessage());
         }
         PISTA = img;
-        PIXEL_READER = pr;
+        LECTOR_PIXELES = pr;
     }
 
     public Sensor(double anguloRelativo) {
@@ -63,12 +65,12 @@ public class Sensor {
             y += dy * 2;
             distancia += 2.0;
 
-            if (PIXEL_READER != null && x >= 0 && x < PISTA.getWidth() && y >= 0 && y < PISTA.getHeight()) {
-                Color pixelColor = PIXEL_READER.getColor((int) x, (int) y);
+            if (LECTOR_PIXELES != null && x >= 0 && x < PISTA.getWidth() && y >= 0 && y < PISTA.getHeight()) {
+                Color colorPixel = LECTOR_PIXELES.getColor((int) x, (int) y);
                 // Wall detection (black) - more lenient
-                if (pixelColor.getRed() < 0.1 && pixelColor.getGreen() < 0.1 && pixelColor.getBlue() < 0.1) {
+                if (colorPixel.getRed() < 0.1 && colorPixel.getGreen() < 0.1 && colorPixel.getBlue() < 0.1) {
                     break;
-                } else if (pixelColor.getRed() > 0.9 && pixelColor.getGreen() < 0.1 && pixelColor.getBlue() < 0.1) {
+                } else if (colorPixel.getRed() > 0.9 && colorPixel.getGreen() < 0.1 && colorPixel.getBlue() < 0.1) {
                     // Finish line (red)
                     metaDetectada = true;
                     break;
@@ -84,7 +86,7 @@ public class Sensor {
         return distancia / MAX_DISTANCIA;
     }
 
-    public boolean isMetaDetectada() {
+    public boolean esMetaDetectada() {
         return metaDetectada;
     }
 
@@ -97,39 +99,70 @@ public class Sensor {
         return ultimaDistancia / MAX_DISTANCIA;
     }
 
-    public static double[] encontrarSpawnPoint() {
-        if (PIXEL_READER == null || PISTA == null) {
-            System.err.println("ERROR: PIXEL_READER o PISTA es null");
+    public static double[] encontrarPuntoInicio() {
+        if (LECTOR_PIXELES == null || PISTA == null) {
+            System.err.println("ERROR: LECTOR_PIXELES o PISTA es null");
             return new double[]{400.0, 500.0};
         }
 
-        // Search for BLUE spawn line pixels - search ENTIRE image
-        double bestBlue = 0;
-        int bestX = 400, bestY = 500;
-        int count = 0;
+        double mejorAzul = 0;
+        int mejorX = 400, mejorY = 500;
+        int contador = 0;
         
-        // Search entire image for blue pixels (spawn line)
         for (int y = 0; y < PISTA.getHeight(); y++) {
             for (int x = 0; x < PISTA.getWidth(); x++) {
-                Color c = PIXEL_READER.getColor(x, y);
-                // Blue spawn: B > 0.5 and R < 0.5 and G < 0.5
+                Color c = LECTOR_PIXELES.getColor(x, y);
                 if (c.getBlue() > 0.5 && c.getRed() < 0.5 && c.getGreen() < 0.5) {
-                    if (c.getBlue() > bestBlue) {
-                        bestBlue = c.getBlue();
-                        bestX = x;
-                        bestY = y;
+                    if (c.getBlue() > mejorAzul) {
+                        mejorAzul = c.getBlue();
+                        mejorX = x;
+                        mejorY = y;
                     }
-                    count++;
+                    contador++;
                 }
             }
         }
         
-        if (count > 0) {
-            // Use the bluest pixel as spawn point
-            return new double[]{bestX, bestY};
+        if (contador > 0) {
+            return new double[]{mejorX, mejorY};
         }
         
-        // Last resort: use a reasonable default
         return new double[]{400.0, 500.0};
+    }
+
+    public static double[] obtenerCoordenadasMeta() {
+        if (metaX < 0 || metaY < 0) {
+            encontrarPuntoMeta();
+        }
+        return new double[]{metaX, metaY};
+    }
+
+    private static void encontrarPuntoMeta() {
+        if (LECTOR_PIXELES == null || PISTA == null) {
+            System.err.println("ERROR: no se puede escanear la meta, LECTOR_PIXELES o PISTA es null");
+            metaX = 400;
+            metaY = 100;
+            return;
+        }
+
+        double mejorRojo = 0;
+        int mejorX = 400, mejorY = 100;
+
+        for (int y = 0; y < PISTA.getHeight(); y++) {
+            for (int x = 0; x < PISTA.getWidth(); x++) {
+                Color c = LECTOR_PIXELES.getColor(x, y);
+                if (c.getRed() > 0.9 && c.getGreen() < 0.1 && c.getBlue() < 0.1) {
+                    if (c.getRed() > mejorRojo) {
+                        mejorRojo = c.getRed();
+                        mejorX = x;
+                        mejorY = y;
+                    }
+                }
+            }
+        }
+
+        metaX = mejorX;
+        metaY = mejorY;
+        System.out.println("Meta detectada en: (" + metaX + ", " + metaY + ")");
     }
 }

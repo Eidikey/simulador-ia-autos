@@ -15,7 +15,7 @@ public abstract class Entidad {
         this.alto = alto;
     }
 
-    public abstract void update();
+    public abstract void actualizar();
 
-    public abstract void render(GraphicsContext gc);
+    public abstract void dibujar(GraphicsContext gc);
 }

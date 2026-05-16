@@ -17,30 +17,30 @@ public class RedNeuronal {
     }
 
     private void inicializarPesos() {
-        Random rand = new Random();
+        Random aleatorio = new Random();
         pesosEntradaOculta = new double[numEntradas][numOcultas];
         pesosOcultaSalida = new double[numOcultas][numSalidas];
 
         for (int i = 0; i < numEntradas; i++) {
             for (int j = 0; j < numOcultas; j++) {
-                pesosEntradaOculta[i][j] = rand.nextDouble() * 2 - 1;
+                pesosEntradaOculta[i][j] = aleatorio.nextDouble() * 2 - 1;
             }
         }
         for (int i = 0; i < numOcultas; i++) {
             for (int j = 0; j < numSalidas; j++) {
-                pesosOcultaSalida[i][j] = rand.nextDouble() * 2 - 1;
+                pesosOcultaSalida[i][j] = aleatorio.nextDouble() * 2 - 1;
             }
         }
     }
 
-    public double[] feedForward(double[] inputs) {
+    public double[] propagarHaciaAdelante(double[] entradas) {
         double[] capaOculta = new double[numOcultas];
         double[] salidas = new double[numSalidas];
 
         for (int j = 0; j < numOcultas; j++) {
             double suma = 0;
             for (int i = 0; i < numEntradas; i++) {
-                suma += inputs[i] * pesosEntradaOculta[i][j];
+                suma += entradas[i] * pesosEntradaOculta[i][j];
             }
             capaOculta[j] = sigmoide(suma);
         }
@@ -56,7 +56,7 @@ public class RedNeuronal {
         return salidas;
     }
 
-    public void auditarTransformacionLineal(double[] inputs, double[] salidas) {
+    public void auditarTransformacionLineal(double[] entradas, double[] salidas) {
         System.out.printf("%n");
         System.out.printf("  ╔══════════════════════════════════════════════════════════════╗%n");
         System.out.printf("  ║       AUDITORÍA MATRICIAL — TRANSFORMACIÓN LINEAL           ║%n");
@@ -69,7 +69,7 @@ public class RedNeuronal {
         System.out.printf(sepHorizX);
         System.out.printf("  │");
         for (int i = 0; i < numEntradas; i++) {
-            System.out.printf("      %7.4f      │", inputs[i]);
+            System.out.printf("      %7.4f      │", entradas[i]);
         }
         System.out.printf("%n");
         System.out.printf(sepFinX);
@@ -109,32 +109,32 @@ public class RedNeuronal {
 
     public double[] getPesosComoArray() {
         int total = (numEntradas * numOcultas) + (numOcultas * numSalidas);
-        double[] array = new double[total];
-        int idx = 0;
+        double[] arreglo = new double[total];
+        int indice = 0;
 
         for (int i = 0; i < numEntradas; i++) {
             for (int j = 0; j < numOcultas; j++) {
-                array[idx++] = pesosEntradaOculta[i][j];
+                arreglo[indice++] = pesosEntradaOculta[i][j];
             }
         }
         for (int i = 0; i < numOcultas; i++) {
             for (int j = 0; j < numSalidas; j++) {
-                array[idx++] = pesosOcultaSalida[i][j];
+                arreglo[indice++] = pesosOcultaSalida[i][j];
             }
         }
-        return array;
+        return arreglo;
     }
 
-    public void setPesosDesdeArray(double[] array) {
-        int idx = 0;
+    public void setPesosDesdeArray(double[] arreglo) {
+        int indice = 0;
         for (int i = 0; i < numEntradas; i++) {
             for (int j = 0; j < numOcultas; j++) {
-                pesosEntradaOculta[i][j] = array[idx++];
+                pesosEntradaOculta[i][j] = arreglo[indice++];
             }
         }
         for (int i = 0; i < numOcultas; i++) {
             for (int j = 0; j < numSalidas; j++) {
-                pesosOcultaSalida[i][j] = array[idx++];
+                pesosOcultaSalida[i][j] = arreglo[indice++];
             }
         }
     }
@@ -144,18 +144,18 @@ public class RedNeuronal {
     }
 
     public void mutar(double tasaMutacion) {
-        Random rand = new Random();
+        Random aleatorio = new Random();
         for (int i = 0; i < numEntradas; i++) {
             for (int j = 0; j < numOcultas; j++) {
-                if (rand.nextDouble() < tasaMutacion) {
-                    pesosEntradaOculta[i][j] += (rand.nextDouble() - 0.5) * 2;
+                if (aleatorio.nextDouble() < tasaMutacion) {
+                    pesosEntradaOculta[i][j] += (aleatorio.nextDouble() - 0.5) * 3.0;
                 }
             }
         }
         for (int i = 0; i < numOcultas; i++) {
             for (int j = 0; j < numSalidas; j++) {
-                if (rand.nextDouble() < tasaMutacion) {
-                    pesosOcultaSalida[i][j] += (rand.nextDouble() - 0.5) * 2;
+                if (aleatorio.nextDouble() < tasaMutacion) {
+                    pesosOcultaSalida[i][j] += (aleatorio.nextDouble() - 0.5) * 3.0;
                 }
             }
         }

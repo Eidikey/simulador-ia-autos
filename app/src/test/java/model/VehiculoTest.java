@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class VehiculoTest {
 
-    static class MockControlador implements Controlador {
+    static class ControladorSimulado implements Controlador {
         private double aceleracion = 0;
         private double giro = 0;
 
@@ -20,37 +20,37 @@ public class VehiculoTest {
 
     @Test
     void testVehiculoMuereAlColisionar() {
-        MockControlador controlador = new MockControlador();
+        ControladorSimulado controlador = new ControladorSimulado();
         Vehiculo v = new Vehiculo(10, 10, 20, 10, controlador);
 
-        RedNeuronal red = new RedNeuronal(5, 4, 2);
+        RedNeuronal red = new RedNeuronal(6, 4, 2);
         ControladorIA cia = new ControladorIA(red);
         v.setControladorIA(cia);
 
         controlador.setAceleracion(0.5);
-        v.update();
+        v.actualizar();
 
-        assertFalse(v.isVivo());
+        assertFalse(v.estaVivo());
     }
 
     @Test
-    void testVehiculoTieneFitnessInicial() {
-        MockControlador controlador = new MockControlador();
+    void testVehiculoTieneAptitudInicial() {
+        ControladorSimulado controlador = new ControladorSimulado();
         Vehiculo v = new Vehiculo(100, 100, 20, 10, controlador);
 
-        assertEquals(0, v.getFitness(), 0.001);
+        assertEquals(0, v.obtenerAptitud(), 0.001);
     }
 
     @Test
     void testVehiculoCruzaMeta() {
-        MockControlador controlador = new MockControlador();
+        ControladorSimulado controlador = new ControladorSimulado();
         Vehiculo v = new Vehiculo(100, 100, 20, 10, controlador);
 
-        RedNeuronal red = new RedNeuronal(5, 4, 2);
+        RedNeuronal red = new RedNeuronal(6, 4, 2);
         ControladorIA cia = new ControladorIA(red);
         v.setControladorIA(cia);
 
-        v.update();
+        v.actualizar();
 
         assertFalse(v.haCruzadoMeta());
     }
