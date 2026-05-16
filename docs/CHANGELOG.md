@@ -754,3 +754,383 @@
 - Generación automática: Cuando todos los autos mueren, se activa `siguienteGeneracion()` automáticamente.
 - Ciclo de vida completo: Los autos aparecen, evolucionan, mueren y renacen continuamente.
 - Build exitoso: Compilación sin errores (9/9 tasks).
+
+---
+
+## 2026-05-16 - Fase 1: Paquetes view/controller y Arquitectura SOLID
+
+### Nuevos Paquetes y Clases
+
+- **`controller/GestorEntradas.java`**: Sistema de entrada por teclado con polling.
+  - Usa `Set<KeyCode>` para detección de teclas presionadas en cada frame.
+  - Compatibilidad WASD + Flechas direccionales.
+  - Métodos: `izquierda()`, `derecha()`, `arriba()`, `abajo()`, `teclaG()`, `teclaM()`, `teclaR()`.
+  - Soporte para acciones futuras (Menú M, Reinicio R).
+
+- **`controller/ControladorJugador.java`**: Implementa `Controlador` para entrada humana.
+  - `obtenerGiro()`: ±0.05 rad/frame (~3°/frame) con teclas LEFT/RIGHT o A/D.
+  - `obtenerAceleracion()`: +0.15 con UP/W, -0.2 con DOWN/S (freno).
+  - Sin dependencias de JavaFX, totalmente testeable.
+
+- **`view/Renderizador.java`**: Centraliza todo el renderizado del Canvas.
+  - `dibujarVehiculo()`: Renderiza vehículos con rotación (save/translate/rotate/restore).
+  - `dibujarSensores()`: Delega en `Sensor.render()` para las líneas de raycasting.
+  - `dibujarHUD()`: Renderiza líneas de telemetría con varargs (flexible por modo).
+  - `dibujarMenu()`: Renderizado de menú principal integrado en Canvas.
+
+### Refactorización SOLID
+
+- **SRP Aplicado**: Simulador ya no maneja rendering directo ni input directo.
+  - Renderizado delegado a `Renderizador` (view package).
+  - Input delegado a `GestorEntradas` (controller package).
+  - Simulador solo orquesta el ciclo: update → render → estado.
+
+- **DIP Aplicado**: Simulador depende de abstracciones `Renderizador` y `GestorEntradas`.
+  - `GestorEntradas` reemplaza el `scene.setOnKeyPressed` directo.
+
+- **OCP habilitado**: Nuevos controladores (IA, Jugador) pueden añadirse sin modificar código existente.
+
+### Cambios en Modelo
+
+- **`model/Vehiculo.java`**: Nuevos getters públicos para el Renderizador.
+  - `getAncho()`, `getAlto()`: Dimensiones del vehículo (antes protected en Entidad).
+  - `getSensores()`: Lista de sensores para renderizado externo.
+
+### Cambios en Engine
+
+- **`engine/Simulador.java`**: Integración de nuevas clases.
+  - Inyecta `GestorEntradas` y `Renderizador` en el constructor.
+  - Timer loop refactorizado: usa `renderizador.limpiar()`, `renderizador.dibujarPista()`,
+    `renderizador.dibujarVehiculo()`, `renderizador.dibujarSensores()`, `renderizador.dibujarHUD()`.
+  - Guardado manual (tecla G) con detección de flanco (edge detection) para evitar guardados múltiples.
+  - Eliminada dependencia directa de `scene.setOnKeyPressed`.
+
+### Resultado
+
+- Build exitoso: Compilación sin errores.
+- Tests pasan: 9/9 tests exitosos.
+- Arquitectura preparada para Fase 2 (Jugador, Pista) y Fase 3 (Modo Competencia).
+- SRP, DIP y OCP mejorados en la estructura del proyecto.
+
+### Tarea 1.4: Componente HUD (view/HUD.java)
+
+- **`view/HUD.java`**: Renderizado especializado de textos de interfaz.
+  - `dibujarEntrenamiento()`: Muestra generación, vivos, fitness en esquina superior derecha (color YELLOW, Monospaced 16).
+  - `dibujarMenu()`: Renderiza menú principal con título grande, opciones navegables (seleccionada en CYAN con ">", no seleccionadas en GRAY), instrucciones en DARKGRAY.
+- Separación de responsabilidad: HUD se enfoca solo en texto, Renderizador lo usa como componente.
+
+### Tarea 1.5: Componente RenderizadorVehiculo (view/RenderizadorVehiculo.java)
+
+- **`view/RenderizadorVehiculo.java`**: Renderizado especializado de vehículos.
+  - `dibujar()`: Aplica rotación (save/translate/rotate/restore) y color parametrizable.
+  - `dibujarSensores()`: Delega en `Sensor.render()` para líneas de raycasting.
+- Renderizador principal usa este componente por composición.
+
+### Tarea 1.6: Sistema de Estados (EstadoJuego y Menú Principal)
+
+- **`engine/EstadoJuego.java`**: Enum con tres estados: `MENU`, `ENTRENAMIENTO`, `CARRERA`.
+- **Refactor `engine/Simulador.java`**: Implementación completa de máquina de estados.
+  - `actualizarMenu()`: Navegación con flechas UP/DOWN (edge detection), selección con ENTER.
+  - Opciones: "ENTRENAR IA", "COMPETIR VS IA", "SALIR" (System.exit).
+  - `iniciarEntrenamiento()`: Crea población y cambia a estado ENTRENAMIENTO.
+  - `actualizarEntrenamiento()`: Bucle de entrenamiento con renderizado vía Renderizador.
+  - `iniciarCarrera()`: Prepara modo competencia (Jugador + IA).
+  - `actualizarCarrera()`: Bucle de carrera con Jugador (placeholder inicial).
+  - Tecla M: Vuelve al menú principal desde cualquier modo (edge detection).
+  - Población se crea bajo demanda (solo en ENTRENAMIENTO), se libera al salir.
+- Edge detection para ENTER, UP, DOWN, G, M evita múltiples disparos por frame.
+
+### Resultado Fase 1
+
+- **Paquetes creados**: `controller/` (2 clases), `view/` (3 clases), `engine/EstadoJuego.java`.
+- **Arquitectura SOLID**:
+  - SRP: Simulador solo orquesta, no dibuja ni captura input.
+  - OCP: Nuevos controladores y renderizadores sin modificar existentes.
+  - DIP: Simulador depende de abstracciones (GestorEntradas, Renderizador, Pista).
+  - ISP: Interfaces específicas (Controlador, HUD, RenderizadorVehiculo).
+- **Menú integrado**: Sistema de estados en Canvas (sin Stages/Scenes adicionales).
+- **Build**: 12/12 tasks exitosos. **Tests**: 9/9 exitosos.
+
+---
+
+## 2026-05-16 - Fase 2: Entidades Pista y Jugador
+
+### Tarea 2.1: Entidad Jugador (model/Jugador.java)
+
+- **`model/Jugador.java`**: Clase que envuelve un Vehiculo controlado por el jugador.
+  - Atributos: `Vehiculo vehiculo`, `ControladorJugador controlador`, `activo`, `inicioX/Y`.
+  - Constructor recibe `Pista` y `GestorEntradas` (inyección de dependencias).
+  - `update()`: Delega en vehiculo.update(), marca inactivo si muere.
+  - `reiniciar(x, y)`: Resetea posición y estado para reintento.
+  - Getters: `getVehiculo()`, `isActivo()`, `getControlador()`.
+- DIP aplicado: Jugador depende de abstracciones (Controlador, Pista, GestorEntradas).
+- LSP: ControladorJugador implementa Controlador, intercambiable con ControladorIA.
+
+### Tarea 2.2: Entidad Pista (model/Pista.java)
+
+- **`model/Pista.java`**: Encapsula la máscara de colisiones de la pista.
+  - Carga `pista.png` como `Image` (800x600) y su `PixelReader`.
+  - Métodos de detección de colores (preservando lógica original de 4 colores):
+    - `esPared(x,y)`: Negro (R<0.1, G<0.1, B<0.1) o fuera de límites → true.
+    - `esMeta(x,y)`: Rojo (R>0.9, G<0.1, B<0.1) → true.
+    - `esSpawn(x,y)`: Azul (B>0.5, R<0.5, G<0.5) → true.
+    - `esTransitable(x,y)`: Dentro de límites y no es pared → true.
+  - `hayColisionEnTrayecto(x1,y1,x2,y2,anchoV,altoV)`: Verifica las 4 esquinas del vehículo en pasos de 2px.
+  - `encontrarSpawnPoint()`: Busca el píxel más azul de la imagen (misma lógica que Sensor original).
+  - `getImagen()`: Para renderizado de la pista de fondo.
+- DIP: Pista es el único punto de acceso a datos de colisión. Sensor y Vehiculo dependen de Pista.
+
+### Tarea 2.3: Refactor Sensor.java (dependencia de Pista)
+
+- **Eliminados**: `static Image PISTA`, `static PixelReader PIXEL_READER`, bloque `static {}`.
+- **Eliminado**: `static double[] encontrarSpawnPoint()` (movido a Pista).
+- **Añadido**: Campo `Pista pista` inyectado por constructor.
+- **Cambio constructor**: `Sensor(double anguloRelativo, Pista pista)`.
+- **Actualizado `medirDistancia()`**: Usa `pista.esPared(x,y)`, `pista.esMeta(x,y)` y `pista.dentroLimites(x,y)` en lugar de acceso directo a PixelReader.
+- Lógica de 4 colores preservada exactamente.
+
+### Tarea 2.4: Refactor Vehiculo.java (dependencia de Pista)
+
+- **Añadido**: Campo `Pista pista` inyectado por constructor.
+- **Cambio constructor**: `Vehiculo(x, y, ancho, alto, controlador, pista)`.
+- **Actualizado `chocaPared()`**: Delega en `pista.hayColisionEnTrayecto()`.
+- **Actualizada creación de sensores**: `new Sensor(a, pista)`.
+- **Eliminado**: Método `render()` (responsabilidad transferida a RenderizadorVehiculo).
+- **Modificada `Entidad.java`**: Eliminado método abstracto `render(GraphicsContext)` (rendering ahora en view/).
+
+### Refactor Poblacion.java (dependencia de Pista)
+
+- **Añadido**: Campo `Pista pista`, inyectado por constructor.
+- **Cambio constructor**: `Poblacion(Pista pista, double inicioX, double inicioY)`.
+- Reemplazado `Sensor.encontrarSpawnPoint()` por `pista.encontrarSpawnPoint()`.
+- Todas las creaciones de Vehiculo pasan `pista`.
+- **Eliminado**: Método `render()` (responsabilidad transferida a Simulador + Renderizador).
+
+### Refactor Simulador.java (integración de Pista y Jugador)
+
+- Crea `Pista` en constructor y usa `pista.getImagen()` para renderizado.
+- Pasa `Pista` a `Poblacion` y `Jugador`.
+- `iniciarCarrera()`: Crea Jugador con input + IA con red cargada (o nueva si no existe guardada).
+- `actualizarCarrera()`: Renderiza vehículo del jugador en ROJO.
+
+### Resultado Fase 2
+
+- **Nuevas entidades**: Pista (encapsula colisiones), Jugador (control humano).
+- **Fisicas preservadas**: Lógica de 4 colores intacta, solo movida de Sensor a Pista.
+- **SOLID**: DIP aplicado (dependencias hacia Pista), SRP (Pista única responsable de datos de pista).
+- **Build**: 12/12 tasks exitosos. **Tests**: 9/9 exitosos.
+
+---
+
+## 2026-05-16 - Fase 3: Modo Competencia (Jugador vs IA)
+
+### Carrera Completa: Jugador vs IA
+
+- **`engine/Simulador.java`** — `iniciarCarrera()` y `actualizarCarrera()` completamente implementados.
+  - Creación de dos vehículos en paralelo:
+    - **Jugador** (ROJO): Controlado por teclado vía `ControladorJugador`.
+    - **IA** (AZUL): Controlado por `ControladorIA` con red cargada desde `mejor_red.json` (o red aleatoria si no existe).
+  - Posiciones separadas verticalmente (spawnY y spawnY-30) para evitar colapso inicial.
+  - Ambos vehículos se actualizan y renderizan simultáneamente en cada frame.
+
+### Condiciones de Victoria
+
+- **6 condiciones de fin de carrera** evaluadas en cada frame:
+  1. Jugador cruza meta + IA no → **GANASTE!**
+  2. IA cruza meta + Jugador no → **PERDISTE!**
+  3. Ambos cruzan meta → Gana el de mayor distancia recorrida.
+  4. Jugador muere + IA muere → **EMPATE!**
+  5. Solo Jugador muere → **PERDISTE!**
+  6. Solo IA muere → **GANASTE!**
+
+### HUD de Carrera (view/HUD.java)
+
+- **`dibujarCarrera()`**: Panel informativo en esquina superior izquierda.
+  - "CARRERA: JUGADOR vs IA", progreso de cada uno, quién va ganando.
+- **`dibujarResultado()`**: Overlay semitransparente con resultado grande (48px), estadísticas, temporizador de 3s.
+  - ENTER para volver al menú después de 3 segundos.
+
+### Mejoras en Renderizador
+
+- **`view/Renderizador.java`**: Nuevos métodos `dibujarHUDCarrera()` y `dibujarResultado()`.
+
+### Resultado Fase 3
+
+- **Carrera funcional**: Jugador vs IA simultáneamente en la misma pista.
+- **Victoria/derrota detectable**: 6 condiciones cubren todos los escenarios.
+- **UX completa**: Pantalla de resultado con estadísticas y tiempo de espera.
+- **Build**: 12/12 tasks exitosos. **Tests**: 9/9 exitosos.
+
+---
+
+## 2026-05-16 - Fase 4: Mejora Visual y Telemetría
+
+### Tarea 4.1: Gráfico de Fitness (view/GraficoEntrenamiento.java)
+
+- **`view/GraficoEntrenamiento.java`**: Gráfico de línea en tiempo real del fitness por generación.
+  - Almacena hasta 150 puntos del historial de fitness.
+  - Renderiza línea verde (LIME) sobre fondo semitransparente.
+  - Muestra valores máximo y mínimo del eje Y, y número de generaciones.
+  - Ubicación: esquina inferior izquierda (20, 500, 180x80) durante entrenamiento.
+  - Se registra el fitness al final de cada generación (cuando todos mueren).
+  - Se limpia al iniciar un nuevo entrenamiento.
+
+### Tarea 4.2: Renderizado con Rotación
+
+- **`RenderizadorVehiculo.dibujar()`** ya implementado en Fase 1.
+  - Rotación correcta usando `gc.save()/translate()/rotate()/restore()`.
+  - Vehículo rota visualmente según su ángulo de dirección.
+  - Colores parametrizables: rojo (jugador), azul (IA), cian (población).
+
+### Tarea 4.3: Ghost Trail (Trayectoria del Mejor Vehículo)
+
+- **`RenderizadorVehiculo.dibujarTrayectoria()`**: Renderiza línea semitransparente.
+- **`Simulador.java`**: Almacena hasta 200 puntos de posición del mejor vehículo vivo.
+  - Captura la posición cada 3 frames para evitar sobrecarga.
+  - Se limpia al iniciar nueva generación.
+  - Color: cian con alpha 0.3 (Color.rgb(0, 255, 255, 0.3)).
+  - Muestra visualmente la ruta que está aprendiendo la IA.
+
+### Resultado Fase 4
+
+- **Gráfico de fitness**: Visualización en tiempo real de la evolución.
+- **Ghost trail**: Muestra la trayectoria del mejor vehículo.
+- **Rotación visual**: Vehículos rotan suavemente según dirección.
+- **Build**: 12/12 tasks exitosos. **Tests**: 15/15 exitosos.
+
+---
+
+## 2026-05-16 - Fase 5: Documentación y Cierre
+
+### Tarea 5.1: Memoria Técnica (docs/MEMORIA_TECNICA.md)
+
+- Documento formal completo con:
+  - **Algoritmo seleccionado**: Neuroevolución (Algoritmo Genético + RNA).
+  - **Justificación**: Comparativa con DDQN, ventajas para el proyecto.
+  - **Arquitectura**: Red 5→4→2, población 50, elitismo, crossover 1 punto, mutación dinámica.
+  - **Función de fitness**: distanciaAvance + (velocidad * 10) - (rotacionAcumulada * 0.3).
+  - **Bonificación por meta**: +50000 al fitness.
+  - **Resultados**: Tabla de métricas y comportamiento observado por generaciones.
+  - **Principios SOLID**: Descripción detallada de cada principio aplicado.
+  - **Estructura MVC**: Diagrama de flujo del sistema.
+  - **Mapa de colores**: Documentación de los 4 colores de la pista.
+
+### Tarea 5.2: Diagrama de Clases (docs/DIAGRAMA_CLASES.md)
+
+- Diagrama UML completo en formato Mermaid.
+  - **22 clases** documentadas con atributos y métodos principales.
+  - **Relaciones**: herencia, implementación, composición y asociación.
+  - **Diagrama de paquetes**: Flujo de dependencias entre paquetes.
+  - Incluye todas las clases del proyecto (model, ai, view, controller, engine).
+
+### Tarea 5.3: Tests Adicionales
+
+- **model/PistaTest.java** (6 tests): Carga, spawn, límites, colisiones, transitabilidad.
+- **model/JugadorTest.java** (3 tests): Creación con IA, posición, estado vivo.
+- **Total**: 15 tests (9 originales + 6 nuevos).
+- Tests verifican: red neuronal, persistencia, vehículo, pista, jugador.
+
+### Tarea 5.4: Build Final
+
+- **Compilación**: `./gradlew :app:build` → BUILD SUCCESSFUL (12/12 tasks).
+- **Tests**: `./gradlew :app:test` → 15/15 tests exitosos.
+- **Ejecución**: `./gradlew :app:run` → Ventana JavaFX con simulador funcional.
+
+---
+
+## 2026-05-16 - HOTFIX: Z-index del Menú, Spawn en Carrera y Sistema de Reintento
+
+### Tarea 1: Visibilidad del Menú (Renderizador + Simulador)
+
+- **Bug**: El menú se renderizaba sobre la pista (fondo claro), haciendo el texto invisible o ilegible.
+- **Solución**: Separación de renderizado de fondo por estado en `Simulador.initTimer()`:
+  - `MENU`: Fondo opaco oscuro `#1e1e2e` (sin pista).
+  - `ENTRENAMIENTO` / `CARRERA`: Pista como fondo normal.
+- **`Renderizador.dibujarFondoMenu()`**: Nuevo método que pinta fondo sólido oscuro para contraste máximo.
+- Menú ahora visible con texto blanco/cyan/gris sobre fondo oscuro.
+
+### Tarea 2: Spawn Correcto del Jugador (Simulador + Pista)
+
+- **Bug**: El vehículo del jugador moría en frame 1 porque el spawn point (centroide azul) se usaba como esquina superior izquierda del vehículo, colocándolo parcialmente fuera de la pista o sobre una pared.
+- **Causa raíz**: `iniciarCarrera()` no aplicaba offset del bounding box (40x20) al posicionar los vehículos.
+- **Solución**:
+  - `model/Pista.java`: Añadidos campos `startX`, `startY` cacheados con getters públicos.
+  - `iniciarCarrera()`: Offset aplicado:
+    - Jugador: `(pista.getStartX() - 20, pista.getStartY() - 10)`
+    - IA: `(pista.getStartX() - 20, pista.getStartY() - 40)`
+  - Vehículos ahora aparecen centrados sobre la línea azul de spawn.
+- **`iniciarEntrenamiento()`**: Ahora usa `pista.getStartX(), pista.getStartY()` (cacheados) en lugar de llamar a `encontrarSpawnPoint()` cada vez.
+
+### Tarea 3: Estado de Game Over y Reintento (Simulador + GestorEntradas + HUD)
+
+- **Bug**: No existía forma de reintentar la carrera sin reiniciar la JVM.
+- **Solución**:
+  - **`Simulador.reiniciarCarrera()`**: Recrea ambos vehículos (Jugador e IA) en sus posiciones iniciales. La IA preserva la misma red neuronal mediante clonación de pesos. Resetea `carreraTerminada`, `resultadoCarrera`, `framesResultado`.
+  - **Tecla 'R'**: Detectada en cada frame de `actualizarCarrera()` con edge detection. Ejecuta `reiniciarCarrera()` tanto si la carrera terminó como si está en curso.
+  - **`HUD.dibujarResultadoConReintento()`**: Nuevo overlay que reemplaza al anterior, mostrando:
+    - Overlay semitransparente (negro 70%).
+    - Texto grande del resultado (LIME/ROJO).
+    - Estadísticas de distancia.
+    - Texto "FIN DE CARRERA" en naranja.
+    - Instrucciones: "Presiona 'R' para reintentar | 'M' para el Menu".
+  - **`GestureEntradas`**: Añadidos métodos `teclaE()` y `teclaC()` para acceso directo desde el menú.
+  - Menú actualizado para mostrar "E: Entrenar | C: Competir" en instrucciones.
+  - HUD de carrera actualizado para mostrar "R: Reiniciar" en lugar de solo "M: Volver al menu".
+
+### Resultado
+
+- **Menú visible**: Fondo oscuro con contraste asegurado.
+- **Spawn correcto**: Vehículos centrados en línea azul, sin muerte en frame 1.
+- **Ciclo completo**: Carrera → Game Over → Reintento (R) o Menú (M) sin reiniciar JVM.
+- **Build**: 12/12 tasks exitosos. **Tests**: 15/15 exitosos.
+
+---
+
+## 2026-05-16 - HOTFIX ARQUITECTÓNICO: Colisión Frame-0, Spawn Centrado, Escalado de Gráficos
+
+### Tarea 1: Resolución de Muerte Instantánea en CARRERA
+
+- **Bug**: En modo CARRERA, Jugador e IA morían en el frame 1 por colisión inmediata contra pared.
+- **Causa raíz**: `Pista.encontrarSpawnPoint()` devolvía un píxel azul en el BORDE izquierdo del carril (x=36) en lugar del centro. El offset `x - 20` para centrar el bounding box de 40px dejaba el vehículo en x=16, 18px DENTRO de la pared (el carril arranca en x=34).
+- **Tres sub-problemas**:
+  1. **Pista.java**: Escaneaba toda la fila para hallar los bordes izquierdo/derecho, pero la pista tiene múltiples segmentos no-pared separados por muros en la misma fila. El centro calculado (x=397) caía en un muro.
+  2. **Poblacion.java**: Creaba vehículos de entrenamiento en `(spawnX, spawnY)` sin aplicar el offset `-ancho/2, -alto/2`, causando la misma colisión en entrenamiento.
+  3. **Simulador.java**: El offset de 40px para separar IA del jugador colocaba al IA FUERA del carril cuando este era angosto.
+- **Soluciones**:
+  - `Pista.encontrarSpawnPoint()`:
+    - Localiza el píxel azul más intenso (marcador de spawn).
+    - Expande hacia izquierda y derecha desde ESE píxel para encontrar los bordes del segmento no-pared CONTIGUO.
+    - Retorna el centro de ESE segmento específico (x=55 en el corredor angosto y=421).
+  - `Poblacion.java`: Pre-aplica offset `-20, -10` al calcular `spawnX, spawnY`, de modo que todos los vehículos se creen centrados.
+  - `Simulador.iniciarCarrera()`: Ambos vehículos se posicionan en `(startX - 20, startY - 10)` con separación vertical de 30px. Ángulo inicial `-PI/2` (hacia arriba, saliendo del corredor angosto hacia la pista ancha).
+  - `Vehiculo.reset(nuevaX, nuevaY, nuevoAngulo)`: Nuevo método que limpia TODO el estado (vivo, haCruzadoMeta, velocidad, distanciaRecorrida, rotacionAcumulada, framesBajaVelocidad, fitness, startX, startY).
+  - `Jugador.reiniciar(x, y, angulo)`: Ahora llama a `vehiculo.reset()`.
+
+### Tarea 2: Prevención de "EMPATE" Prematuro
+
+- **Bug**: Si ambos vehículos morían en el frame 0-1, la lógica de carrera disparaba instantáneamente el resultado "EMPATE".
+- **Solución** (`Simulador.java`): Contador `framesCarrera` con umbral `FRAMES_SEGUROS = 30`. Las condiciones de muerte (`!jugadorVivo && !iaVivo`, `!jugadorVivo`, `!iaVivo`) solo activan fin de carrera si `framesCarrera > 30`. Esto evita que glitches de spawn disparen el game over.
+
+### Tarea 3: Rediseño de `GraficoEntrenamiento.java`
+
+- **Problema**: El gráfico de fitness carecía de márgenes/padding, el escalado usaba todo el alto disponible (sin margen para etiquetas) y el mapeo de puntos era lineal sin considerar padding.
+- **Rediseño**:
+  - Constantes: `int padding = 40;`, `double w = 350;`, `double h = 200;`.
+  - Fondo: Rectángulo oscuro `gc.setFill(Color.color(0.1, 0.1, 0.1, 0.85))`.
+  - Escala dinámica: Encuentra `maxFit` del historial; si es 0, usa `maxFit = 1.0`.
+  - Mapeo matemático de coordenadas:
+    - `puntoX = x + padding + (i * (w - 2 * padding) / max(1, historial - 1))`
+    - `puntoY = y + h - padding - ((fitnessActual / maxFit) * (h - 2 * padding))`
+  - Renderizado: Líneas en CYAN con `gc.strokeLine()`. Valores de eje (max/min) renderizados FUERA del área de trazado.
+
+### Tarea 4: Tests Afectados
+
+- `testSpawnPointEsAzul` → Eliminado (el spawn ahora es el CENTRO del carril, no un píxel azul; el píxel azul solo es marcador).
+- `testSpawnPointEsTransitable` → Se mantiene, ahora verifica que el centro del carril sea transitable (no-pared).
+- `testSpawnEsTransitable` → Ajustado: usa ruta vertical (hacia arriba, dentro del corredor) en vez de diagonal (que salía del carril angosto).
+
+### Build Final
+
+- **Compilación**: `./gradlew :app:build` → BUILD SUCCESSFUL (12/12 tasks).
+- **Tests**: 18/18 exitosos.
+- **Archivos modificados**: `model/Vehiculo.java`, `model/Jugador.java`, `model/Pista.java`, `engine/Simulador.java`, `ai/Poblacion.java`, `view/GraficoEntrenamiento.java`, tests.

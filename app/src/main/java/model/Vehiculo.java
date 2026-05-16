@@ -1,8 +1,6 @@
 package model;
 
 import ai.ControladorIA;
-import javafx.scene.canvas.GraphicsContext;
-import javafx.scene.paint.Color;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,15 +15,15 @@ public class Vehiculo extends Entidad {
     private double startX;
     private double startY;
     private double rotacionAcumulada;
-    private double ultimoX;
-    private double ultimoY;
     private boolean vivo;
     private double fitness;
     private int framesBajaVelocidad;
     private boolean haCruzadoMeta;
+    private final Pista pista;
 
-    public Vehiculo(double x, double y, double ancho, double alto, Controlador controlador) {
+    public Vehiculo(double x, double y, double ancho, double alto, Controlador controlador, Pista pista) {
         super(x, y, ancho, alto);
+        this.pista = pista;
         this.velocidad = 0.5;
         this.angulo = 0;
         this.controlador = controlador;
@@ -33,8 +31,6 @@ public class Vehiculo extends Entidad {
         this.startX = x;
         this.startY = y;
         this.rotacionAcumulada = 0;
-        this.ultimoX = x;
-        this.ultimoY = y;
         this.vivo = true;
         this.fitness = 0;
         this.sensores = new ArrayList<>();
@@ -43,7 +39,7 @@ public class Vehiculo extends Entidad {
 
         double[] angulos = {-90, -45, 0, 45, 90};
         for (double a : angulos) {
-            sensores.add(new Sensor(a));
+            sensores.add(new Sensor(a, pista));
         }
     }
 
@@ -130,47 +126,8 @@ public class Vehiculo extends Entidad {
     }
 
     private boolean chocaPared(double xInicio, double yInicio, double xFin, double yFin) {
-        if (Sensor.PIXEL_READER == null) return false;
-
-        double dx = xFin - xInicio;
-        double dy = yFin - yInicio;
-        double distancia = Math.sqrt(dx * dx + dy * dy);
-        int pasos = (int) (distancia / 2) + 1;
-
-        for (int paso = 0; paso <= pasos; paso++) {
-            double t = paso / (double) pasos;
-            double px = xInicio + dx * t;
-            double py = yInicio + dy * t;
-
-            int[] cornersX = {(int)px, (int)(px + ancho), (int)px, (int)(px + ancho)};
-            int[] cornersY = {(int)py, (int)(py + alto), (int)(py + alto), (int)py};
-
-            for (int i = 0; i < 4; i++) {
-                int cx = cornersX[i];
-                int cy = cornersY[i];
-                if (cx >= 0 && cx < Sensor.PISTA.getWidth() && cy >= 0 && cy < Sensor.PISTA.getHeight()) {
-                    javafx.scene.paint.Color c = Sensor.PIXEL_READER.getColor(cx, cy);
-                    if (c.getRed() == 0 && c.getGreen() == 0 && c.getBlue() == 0) {
-                        return true;
-                    }
-                } else {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    @Override
-    public void render(GraphicsContext gc) {
-        if (!vivo) return;
-
-        gc.setFill(Color.web("#00FFCC"));
-        gc.fillRect(x, y, ancho, alto);
-
-        for (Sensor s : sensores) {
-            s.render(gc);
-        }
+        if (pista == null) return false;
+        return pista.hayColisionEnTrayecto(xInicio, yInicio, xFin, yFin, ancho, alto);
     }
 
     public boolean isVivo() { return vivo; }
@@ -184,7 +141,25 @@ public class Vehiculo extends Entidad {
     }
     public double getX() { return x; }
     public double getY() { return y; }
+    public double getAncho() { return ancho; }
+    public double getAlto() { return alto; }
     public void setAngulo(double a) { this.angulo = a; }
     public double getAngulo() { return angulo; }
     public boolean haCruzadoMeta() { return haCruzadoMeta; }
+    public List<Sensor> getSensores() { return sensores; }
+
+    public void reset(double nuevaX, double nuevaY, double nuevoAngulo) {
+        this.x = nuevaX;
+        this.y = nuevaY;
+        this.angulo = nuevoAngulo;
+        this.velocidad = 0.5;
+        this.distanciaRecorrida = 0;
+        this.rotacionAcumulada = 0;
+        this.framesBajaVelocidad = 0;
+        this.fitness = 0;
+        this.vivo = true;
+        this.haCruzadoMeta = false;
+        this.startX = nuevaX;
+        this.startY = nuevaY;
+    }
 }

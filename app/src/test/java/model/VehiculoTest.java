@@ -2,10 +2,17 @@ package model;
 
 import ai.ControladorIA;
 import ai.RedNeuronal;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class VehiculoTest {
+    private static Pista pista;
+
+    @BeforeAll
+    static void setUp() {
+        pista = new Pista();
+    }
 
     static class MockControlador implements Controlador {
         private double aceleracion = 0;
@@ -21,7 +28,7 @@ public class VehiculoTest {
     @Test
     void testVehiculoMuereAlColisionar() {
         MockControlador controlador = new MockControlador();
-        Vehiculo v = new Vehiculo(10, 10, 20, 10, controlador);
+        Vehiculo v = new Vehiculo(10, 10, 20, 10, controlador, pista);
 
         RedNeuronal red = new RedNeuronal(5, 4, 2);
         ControladorIA cia = new ControladorIA(red);
@@ -36,7 +43,7 @@ public class VehiculoTest {
     @Test
     void testVehiculoTieneFitnessInicial() {
         MockControlador controlador = new MockControlador();
-        Vehiculo v = new Vehiculo(100, 100, 20, 10, controlador);
+        Vehiculo v = new Vehiculo(100, 100, 20, 10, controlador, pista);
 
         assertEquals(0, v.getFitness(), 0.001);
     }
@@ -44,7 +51,7 @@ public class VehiculoTest {
     @Test
     void testVehiculoCruzaMeta() {
         MockControlador controlador = new MockControlador();
-        Vehiculo v = new Vehiculo(100, 100, 20, 10, controlador);
+        Vehiculo v = new Vehiculo(100, 100, 20, 10, controlador, pista);
 
         RedNeuronal red = new RedNeuronal(5, 4, 2);
         ControladorIA cia = new ControladorIA(red);

@@ -1,7 +1,5 @@
 package model;
 
-import javafx.scene.canvas.GraphicsContext;
-
 public abstract class Entidad {
     protected double x;
     protected double y;
@@ -16,6 +14,4 @@ public abstract class Entidad {
     }
 
     public abstract void update();
-
-    public abstract void render(GraphicsContext gc);
 }
