@@ -35,7 +35,7 @@ public class VehiculoTest {
         v.setControladorIA(cia);
 
         controlador.setAceleracion(0.5);
-        v.update();
+        for (int i = 0; i < 10; i++) v.update();
 
         assertFalse(v.isVivo());
     }

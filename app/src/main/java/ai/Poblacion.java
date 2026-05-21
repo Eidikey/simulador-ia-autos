@@ -48,6 +48,7 @@ public class Poblacion {
       RedNeuronal red = new RedNeuronal(5, 4, 2);
       ControladorIA controlador = new ControladorIA(red);
       Vehiculo v = new Vehiculo(x, y, 40, 20, controlador, pista);
+      v.setAngulo(-Math.PI / 2);
       v.setControladorIA(controlador);
       vehiculos.add(v);
     }
@@ -58,7 +59,7 @@ public class Poblacion {
   private void crearPoblacionConRed(double x, double y, RedNeuronal redBase) {
     ControladorIA ciElite = new ControladorIA(redBase);
     Vehiculo elite = new Vehiculo(x, y, 40, 20, ciElite, pista);
-    elite.setAngulo(0);
+    elite.setAngulo(-Math.PI / 2);
     elite.setControladorIA(ciElite);
     vehiculos.add(elite);
 
@@ -68,7 +69,7 @@ public class Poblacion {
       redClon.mutar(0.1);
       ControladorIA ci = new ControladorIA(redClon);
       Vehiculo v = new Vehiculo(x, y, 40, 20, ci, pista);
-      v.setAngulo(0);
+      v.setAngulo(-Math.PI / 2);
       v.setControladorIA(ci);
       vehiculos.add(v);
     }
@@ -112,7 +113,12 @@ public class Poblacion {
     List<Vehiculo> nuevaGeneracion = new ArrayList<>();
 
     crossover(nuevaGeneracion);
-    mutacion(nuevaGeneracion, generacionesEstancadas > 5 ? 0.4 : 0.1);
+    double tasaMut = generacionesEstancadas > 15 ? 0.15 : 0.08;
+    mutacion(nuevaGeneracion, tasaMut);
+    if (generacionesEstancadas > 15) {
+        inyectarAleatorios(nuevaGeneracion, 5);
+        generacionesEstancadas = 0;
+    }
 
     vehiculos.clear();
     vehiculos.addAll(nuevaGeneracion);
@@ -122,23 +128,22 @@ public class Poblacion {
   }
 
   private void evaluarFitness() {
-    for (Vehiculo v : vehiculos) {
-      v.setFitness(v.getDistanciaRecorrida());
-    }
     vehiculos.sort((v1, v2) -> Double.compare(v2.getFitness(), v1.getFitness()));
   }
 
   private void crossover(List<Vehiculo> nuevaGeneracion) {
-    Vehiculo mejor = vehiculos.get(0);
-    RedNeuronal redElite = new RedNeuronal(5, 4, 2);
-    redElite.setPesosDesdeArray(((ControladorIA) mejor.getControladorIA()).getRed().getPesosComoArray());
-    ControladorIA ciElite = new ControladorIA(redElite);
-    Vehiculo elite = new Vehiculo(spawnX, spawnY, 40, 20, ciElite, pista);
-    elite.setAngulo(0);
-    elite.setControladorIA(ciElite);
-    nuevaGeneracion.add(elite);
+    for (int e = 0; e < Math.min(3, vehiculos.size()); e++) {
+      Vehiculo top = vehiculos.get(e);
+      RedNeuronal redElite = new RedNeuronal(5, 4, 2);
+      redElite.setPesosDesdeArray(((ControladorIA) top.getControladorIA()).getRed().getPesosComoArray());
+      ControladorIA ciElite = new ControladorIA(redElite);
+      Vehiculo elite = new Vehiculo(spawnX, spawnY, 40, 20, ciElite, pista);
+      elite.setAngulo(-Math.PI / 2);
+      elite.setControladorIA(ciElite);
+      nuevaGeneracion.add(elite);
+    }
 
-    for (int i = 1; i < tamanoPoblacion; i++) {
+    for (int i = 3; i < tamanoPoblacion; i++) {
       Vehiculo padre1 = seleccionarPadre();
       Vehiculo padre2 = seleccionarPadre();
 
@@ -153,32 +158,30 @@ public class Poblacion {
 
       RedNeuronal redHijo = new RedNeuronal(5, 4, 2);
       redHijo.setPesosDesdeArray(hijo);
-      redHijo.mutar(0.1);
       ControladorIA ci = new ControladorIA(redHijo);
       Vehiculo nv = new Vehiculo(spawnX, spawnY, 40, 20, ci, pista);
-      nv.setAngulo(0);
+      nv.setAngulo(-Math.PI / 2);
       nv.setControladorIA(ci);
       nuevaGeneracion.add(nv);
     }
   }
 
   private void mutacion(List<Vehiculo> poblacion, double tasaMutacion) {
-    for (int i = 1; i < poblacion.size(); i++) {
+    for (int i = 3; i < poblacion.size(); i++) {
       ControladorIA ci = (ControladorIA) poblacion.get(i).getControladorIA();
       ci.getRed().mutar(tasaMutacion);
     }
   }
 
   private Vehiculo seleccionarPadre() {
-    double totalFitness = vehiculos.stream().mapToDouble(Vehiculo::getFitness).sum();
-    double r = rand.nextDouble() * totalFitness;
-    double acumulado = 0;
-    for (Vehiculo v : vehiculos) {
-      acumulado += v.getFitness();
-      if (acumulado >= r)
-        return v;
+    Vehiculo mejor = null;
+    for (int t = 0; t < 3; t++) {
+      Vehiculo candidato = vehiculos.get(rand.nextInt(vehiculos.size()));
+      if (mejor == null || candidato.getFitness() > mejor.getFitness()) {
+        mejor = candidato;
+      }
     }
-    return vehiculos.get(0);
+    return mejor;
   }
 
   public int getGeneracion() {
@@ -199,5 +202,18 @@ public class Poblacion {
 
   public List<Vehiculo> getVehiculos() {
     return vehiculos;
+  }
+
+  private void inyectarAleatorios(List<Vehiculo> poblacion, int cantidad) {
+    int inicio = poblacion.size() - cantidad;
+    for (int i = inicio; i < poblacion.size(); i++) {
+      RedNeuronal redNueva = new RedNeuronal(5, 4, 2);
+      ControladorIA ci = new ControladorIA(redNueva);
+      Vehiculo v = new Vehiculo(spawnX, spawnY, 40, 20, ci, pista);
+      v.setAngulo(-Math.PI / 2);
+      v.setControladorIA(ci);
+      poblacion.set(i, v);
+    }
+    System.out.println("Inyectados " + cantidad + " individuos aleatorios por estancamiento.");
   }
 }

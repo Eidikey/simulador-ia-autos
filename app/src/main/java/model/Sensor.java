@@ -28,7 +28,7 @@ public class Sensor {
     public double medirDistancia(double origenX, double origenY, double anguloVehiculo) {
         this.origenX = origenX;
         this.origenY = origenY;
-        double anguloGrados = anguloVehiculo + anguloRelativo;
+        double anguloGrados = Math.toDegrees(anguloVehiculo) + anguloRelativo;
         double anguloRad = Math.toRadians(anguloGrados);
         double dx = Math.cos(anguloRad);
         double dy = Math.sin(anguloRad);

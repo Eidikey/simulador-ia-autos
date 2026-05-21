@@ -1,5 +1,6 @@
 package engine;
 
+import ai.GestorPartida;
 import ai.GestorRed;
 import ai.Poblacion;
 import ai.ControladorIA;
@@ -12,6 +13,7 @@ import javafx.scene.Scene;
 import javafx.scene.paint.Color;
 import view.Renderizador;
 import model.Jugador;
+import model.PartidaGuardada;
 import model.Pista;
 import model.Vehiculo;
 
@@ -36,11 +38,15 @@ public class Simulador {
         "COMPETIR VS IA",
         "SALIR"
     };
+    private static final String[] DIFICULTADES = {"FACIL", "MEDIO", "DIFICIL"};
+    private int dificultadSeleccionada = 0;
 
     private boolean gPrevia = false;
     private boolean enterPrevio = false;
     private boolean arribaPrevio = false;
     private boolean abajoPrevio = false;
+    private boolean izquierdaPrevia = false;
+    private boolean derechaPrevia = false;
     private boolean mPrevia = false;
     private boolean rPrevia = false;
     private boolean ePrevia = false;
@@ -108,6 +114,21 @@ public class Simulador {
         if (abajoActual && !abajoPrevio) {
             opcionMenu = (opcionMenu + 1) % OPCIONES_MENU.length;
         }
+        if (opcionMenu == 1) {
+            boolean izqActual = input.izquierda();
+            boolean derActual = input.derecha();
+            if (izqActual && !izquierdaPrevia) {
+                dificultadSeleccionada = (dificultadSeleccionada - 1 + DIFICULTADES.length) % DIFICULTADES.length;
+            }
+            if (derActual && !derechaPrevia) {
+                dificultadSeleccionada = (dificultadSeleccionada + 1) % DIFICULTADES.length;
+            }
+            izquierdaPrevia = izqActual;
+            derechaPrevia = derActual;
+        } else {
+            izquierdaPrevia = input.izquierda();
+            derechaPrevia = input.derecha();
+        }
         if ((enterActual && !enterPrevio) || (eActual && !ePrevia)) {
             switch (opcionMenu) {
                 case 0 -> iniciarEntrenamiento();
@@ -125,10 +146,23 @@ public class Simulador {
         ePrevia = eActual;
         cPrevia = cActual;
 
-        renderizador.dibujarMenu(gc, "SIMULADOR DE AUTOS AUTONOMOS", opcionMenu, OPCIONES_MENU);
+        renderizador.dibujarMenu(gc, "SIMULADOR DE AUTOS AUTONOMOS", opcionMenu, getOpcionesMenuVisuales());
+    }
+
+    private String[] getOpcionesMenuVisuales() {
+        String[] visuales = new String[OPCIONES_MENU.length];
+        for (int i = 0; i < OPCIONES_MENU.length; i++) {
+            if (i == 1) {
+                visuales[i] = OPCIONES_MENU[i] + "   <" + DIFICULTADES[dificultadSeleccionada] + ">";
+            } else {
+                visuales[i] = OPCIONES_MENU[i];
+            }
+        }
+        return visuales;
     }
 
     private void iniciarEntrenamiento() {
+        gPrevia = false;
         poblacion = new Poblacion(pista, pista.getStartX(), pista.getStartY());
         renderizador.getGrafico().limpiar();
         trayectoria.clear();
@@ -201,26 +235,88 @@ public class Simulador {
         mPrevia = mActual;
     }
 
-    private void iniciarCarrera() {
+    private double[] calcularSpawnsSeparados() {
         double cx = pista.getStartX();
         double cy = pista.getStartY();
 
-        spawnJugadorX = cx - 20;
-        spawnJugadorY = cy - 10;
-        spawnIAX = cx - 20;
-        spawnIAY = cy - 10 - 30;
+        double jx = cx - 20, jy = cy - 10;
+        double[][] candidatosJug = {
+            {cx - 20, cy - 10}, {cx - 20, cy},     {cx - 20, cy + 10},
+            {cx,      cy - 10}, {cx,      cy},     {cx,      cy + 10},
+            {cx - 40, cy - 10}, {cx - 40, cy},
+        };
+        for (double[] c : candidatosJug) {
+            if (esSpawnSeguro(c[0], c[1])) { jx = c[0]; jy = c[1]; break; }
+        }
 
+        double ix = jx, iy = jy - 35;
+        double[][] candidatosIA = {
+            {jx,      jy - 35}, {jx,      jy - 50}, {jx,      jy - 25},
+            {jx - 5,  jy - 35}, {jx + 5,  jy - 35},
+            {cx + 20, cy - 10}, {cx - 60, cy - 10},
+            {cx,      cy + 20},
+        };
+        for (double[] c : candidatosIA) {
+            double dist = Math.sqrt(Math.pow(c[0]-jx,2) + Math.pow(c[1]-jy,2));
+            if (esSpawnSeguro(c[0], c[1]) && dist > 20) {
+                ix = c[0]; iy = c[1]; break;
+            }
+        }
+
+        double anguloJugador = pista.detectarAnguloInicial(jx, jy);
+        double anguloIA      = pista.detectarAnguloInicial(ix, iy);
+        System.out.println("Spawn Jugador: (" + jx + ", " + jy + ") angulo=" + Math.toDegrees(anguloJugador));
+        System.out.println("Spawn IA:      (" + ix + ", " + iy + ") angulo=" + Math.toDegrees(anguloIA));
+        return new double[]{jx, jy, ix, iy, anguloJugador, anguloIA};
+    }
+
+    private boolean esSpawnSeguro(double x, double y) {
+        return !pista.hayColisionEnTrayecto(x, y, x + 1.0, y, 40, 20);
+    }
+
+    private void iniciarCarrera() {
+        gPrevia = false;
+        double[] spawns = calcularSpawnsSeparados();
+        spawnJugadorX = spawns[0];
+        spawnJugadorY = spawns[1];
+        spawnIAX      = spawns[2];
+        spawnIAY      = spawns[3];
+        double anguloJugador = spawns[4];
+        double anguloIA      = spawns[5];
         jugador = new Jugador(spawnJugadorX, spawnJugadorY, pista, input);
+        jugador.getVehiculo().setAngulo(anguloJugador);
 
-        RedNeuronal redCargada = GestorRed.cargarMejorRed();
-        if (redCargada == null) {
-            redCargada = new RedNeuronal(5, 4, 2);
-            System.out.println("No se encontro red entrenada. Usando IA aleatoria.");
+        RedNeuronal redCargada = null;
+        switch (dificultadSeleccionada) {
+            case 0 -> {
+                redCargada = new RedNeuronal(5, 4, 2);
+                System.out.println("Dificultad FACIL: IA aleatoria");
+            }
+            case 1 -> {
+                redCargada = GestorRed.cargarMejorRed();
+                if (redCargada != null) {
+                    redCargada.mutar(0.2);
+                    System.out.println("Dificultad MEDIO: IA con ruido");
+                } else {
+                    redCargada = new RedNeuronal(5, 4, 2);
+                    System.out.println("No hay red guardada. Usando IA aleatoria.");
+                }
+            }
+            case 2 -> {
+                redCargada = GestorRed.cargarMejorRed();
+                if (redCargada == null) {
+                    redCargada = new RedNeuronal(5, 4, 2);
+                    System.out.println("No hay red guardada. Usando IA aleatoria.");
+                } else {
+                    System.out.println("Dificultad DIFICIL: mejor red entrenada");
+                }
+            }
         }
         ControladorIA ciAI = new ControladorIA(redCargada);
         ciAIReferencia = ciAI;
         iaVehiculo = new Vehiculo(spawnIAX, spawnIAY, 40, 20, ciAI, pista);
-        iaVehiculo.reset(spawnIAX, spawnIAY, -Math.PI / 2);
+        iaVehiculo.reset(spawnIAX, spawnIAY, anguloIA);
+        iaVehiculo.setAngulo(anguloIA);
         iaVehiculo.setControladorIA(ciAI);
 
         carreraTerminada = false;
@@ -229,8 +325,8 @@ public class Simulador {
         framesCarrera = 0;
 
         System.out.println("Modo CARRERA iniciado - Jugador vs IA");
-        System.out.println("  Jugador spawn: (" + spawnJugadorX + ", " + spawnJugadorY + ") angulo=-PI/2");
-        System.out.println("  IA spawn: (" + spawnIAX + ", " + spawnIAY + ") angulo=-PI/2");
+        System.out.println("  Jugador spawn: (" + spawnJugadorX + ", " + spawnJugadorY + ") angulo=" + Math.toDegrees(anguloJugador));
+        System.out.println("  IA spawn: (" + spawnIAX + ", " + spawnIAY + ") angulo=" + Math.toDegrees(anguloIA));
         estado = EstadoJuego.CARRERA;
     }
 
@@ -313,6 +409,20 @@ public class Simulador {
                 limpiarCarrera();
             }
             mPrevia = input.teclaM();
+
+            boolean gActual = input.teclaG();
+            if (gActual && !gPrevia) {
+                PartidaGuardada pg = new PartidaGuardada(
+                    resultadoCarrera,
+                    jugador.getVehiculo().getDistanciaRecorrida(),
+                    iaVehiculo.getDistanciaRecorrida(),
+                    jugador.getVehiculo().haCruzadoMeta(),
+                    iaVehiculo.haCruzadoMeta(),
+                    framesCarrera
+                );
+                GestorPartida.guardar(pg);
+            }
+            gPrevia = gActual;
         } else {
             boolean mActual = input.teclaM();
             if (mActual && !mPrevia) {
@@ -323,15 +433,15 @@ public class Simulador {
     }
 
     private void reiniciarCarrera() {
-        double cx = pista.getStartX();
-        double cy = pista.getStartY();
-
-        spawnJugadorX = cx - 20;
-        spawnJugadorY = cy - 10;
-        spawnIAX = cx - 20;
-        spawnIAY = cy - 10 - 30;
-
+        double[] spawns = calcularSpawnsSeparados();
+        spawnJugadorX = spawns[0];
+        spawnJugadorY = spawns[1];
+        spawnIAX      = spawns[2];
+        spawnIAY      = spawns[3];
+        double anguloJugador = spawns[4];
+        double anguloIA      = spawns[5];
         jugador = new Jugador(spawnJugadorX, spawnJugadorY, pista, input);
+        jugador.getVehiculo().setAngulo(anguloJugador);
 
         ControladorIA ciAI;
         if (ciAIReferencia != null) {
@@ -342,7 +452,8 @@ public class Simulador {
             ciAI = new ControladorIA(new RedNeuronal(5, 4, 2));
         }
         iaVehiculo = new Vehiculo(spawnIAX, spawnIAY, 40, 20, ciAI, pista);
-        iaVehiculo.reset(spawnIAX, spawnIAY, -Math.PI / 2);
+        iaVehiculo.reset(spawnIAX, spawnIAY, anguloIA);
+        iaVehiculo.setAngulo(anguloIA);
         iaVehiculo.setControladorIA(ciAI);
 
         carreraTerminada = false;

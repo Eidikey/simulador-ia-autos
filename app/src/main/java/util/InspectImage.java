@@ -1,3 +1,5 @@
+package util;
+
 import javafx.scene.image.Image;
 import javafx.scene.image.PixelReader;
 import javafx.scene.paint.Color;
@@ -13,11 +15,11 @@ public class InspectImage {
             Image img = new Image(is, 800, 600, false, true);
             PixelReader pr = img.getPixelReader();
             System.out.println("Image dimensions: " + img.getWidth() + "x" + img.getHeight());
-            
+
             // Check default spawn point (400,500)
             Color defaultSpawn = pr.getColor(400, 500);
             System.out.println("Default spawn (400,500) - R:" + defaultSpawn.getRed() + " G:" + defaultSpawn.getGreen() + " B:" + defaultSpawn.getBlue());
-            
+
             // Search for blue pixels (spawn line)
             int blueCount = 0;
             double bestBlue = 0;
@@ -41,7 +43,7 @@ public class InspectImage {
                 Color bestPixel = pr.getColor(bestX, bestY);
                 System.out.println("Best pixel color - R:" + bestPixel.getRed() + " G:" + bestPixel.getGreen() + " B:" + bestPixel.getBlue());
             }
-            
+
             // Check if best spawn point is on track (green) or wall (black)
             if (blueCount > 0) {
                 Color spawnColor = pr.getColor(bestX, bestY);

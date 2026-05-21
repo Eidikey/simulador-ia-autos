@@ -8,12 +8,26 @@ public class GestorRed {
     private static final Gson gson = new Gson();
 
     static {
-        File archivo = new File("app/src/main/resources/mejor_red.json");
-        if (archivo.exists() || new File("app").exists()) {
-            RUTA_ARCHIVO = "app/src/main/resources/mejor_red.json";
-        } else {
-            RUTA_ARCHIVO = "src/main/resources/mejor_red.json";
+        String[] candidatos = {
+            "app/src/main/resources/mejor_red.json",
+            "src/main/resources/mejor_red.json"
+        };
+        String rutaElegida = System.getProperty("user.home")
+            + java.io.File.separator + ".simulador_ia"
+            + java.io.File.separator + "mejor_red.json";
+
+        for (String ruta : candidatos) {
+            File f = new File(ruta);
+            if (f.exists()) {
+                rutaElegida = ruta;
+                break;
+            }
+            if (f.getParentFile() != null && f.getParentFile().isDirectory()) {
+                rutaElegida = ruta;
+                break;
+            }
         }
+        RUTA_ARCHIVO = rutaElegida;
     }
 
     public static void guardarRed(RedNeuronal red) {

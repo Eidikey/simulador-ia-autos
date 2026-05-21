@@ -40,7 +40,7 @@ public class HUD {
 
         gc.setFill(Color.DARKGRAY);
         gc.setFont(Font.font("Monospaced", FontWeight.NORMAL, 14));
-        gc.fillText("FLECHAS: Navegar  |  ENTER: Seleccionar  |  M: Menu", 200, 520);
+        gc.fillText("FLECHAS: Navegar  |  < >: Dificultad  |  ENTER: Ok  |  M: Menu", 150, 520);
         gc.fillText("E: Entrenar  |  C: Competir", 200, 540);
     }
 
@@ -105,6 +105,6 @@ public class HUD {
         gc.fillText("FIN DE CARRERA", 300, 400);
         gc.setFill(Color.WHITE);
         gc.setFont(Font.font("Monospaced", FontWeight.NORMAL, 16));
-        gc.fillText("Presiona 'R' para reintentar  |  'M' para el Menu", 200, 440);
+        gc.fillText("R: Reintentar  |  G: Guardar partida  |  M: Menu", 180, 440);
     }
 }

@@ -19,6 +19,7 @@ public class Vehiculo extends Entidad {
     private double fitness;
     private int framesBajaVelocidad;
     private boolean haCruzadoMeta;
+    private int framesVivo;
     private final Pista pista;
 
     public Vehiculo(double x, double y, double ancho, double alto, Controlador controlador, Pista pista) {
@@ -36,6 +37,7 @@ public class Vehiculo extends Entidad {
         this.sensores = new ArrayList<>();
         this.framesBajaVelocidad = 0;
         this.haCruzadoMeta = false;
+        this.framesVivo = 0;
 
         double[] angulos = {-90, -45, 0, 45, 90};
         for (double a : angulos) {
@@ -55,13 +57,15 @@ public class Vehiculo extends Entidad {
     public void update() {
         if (!vivo) return;
 
+        framesVivo++;
+
         double[] inputs = new double[sensores.size()];
         boolean metaDetectada = false;
 
         for (int i = 0; i < sensores.size(); i++) {
             double dist = sensores.get(i).medirDistancia(x, y, angulo);
             inputs[i] = dist;
-            if (sensores.get(i).isMetaDetectada() && dist < 5.0 / 300.0) {
+            if (sensores.get(i).isMetaDetectada() && dist < 3.0 / 300.0 && framesVivo > 30) {
                 metaDetectada = true;
             }
         }
@@ -79,7 +83,12 @@ public class Vehiculo extends Entidad {
         double aceleracion = controlador.obtenerAceleracion();
         double giro = controlador.obtenerGiro();
 
-        velocidad += aceleracion + 0.1;
+        if (controladorIA != null) {
+            velocidad += aceleracion + 0.1;
+        } else {
+            velocidad += aceleracion;
+            if (velocidad < 0) velocidad = 0;
+        }
         angulo += giro;
         rotacionAcumulada += Math.abs(giro);
 
@@ -91,23 +100,13 @@ public class Vehiculo extends Entidad {
             distanciaRecorrida += avance;
         }
 
-        double distanciaAvance = Math.sqrt(Math.pow(x - startX, 2) + Math.pow(y - startY, 2));
-        fitness = distanciaAvance + (velocidad * 10) - (rotacionAcumulada * 0.3);
+        fitness = distanciaRecorrida + (velocidad * 5);
 
-        if (rotacionAcumulada > Math.toRadians(360) && distanciaAvance < 50) {
+        if (rotacionAcumulada > Math.toRadians(360) && distanciaRecorrida < 50) {
             vivo = false;
         }
 
-        for (Sensor s : sensores) {
-            if (s.getUltimaDistancia() <= 0.01) {
-                vivo = false;
-                break;
-            }
-        }
-
-        if (!vivo) return;
-
-        if (chocaPared(x, y, nuevoX, nuevoY)) {
+        if (framesVivo > 5 && chocaPared(x, y, nuevoX, nuevoY)) {
             vivo = false;
             return;
         }
@@ -159,6 +158,7 @@ public class Vehiculo extends Entidad {
         this.fitness = 0;
         this.vivo = true;
         this.haCruzadoMeta = false;
+        this.framesVivo = 0;
         this.startX = nuevaX;
         this.startY = nuevaY;
     }

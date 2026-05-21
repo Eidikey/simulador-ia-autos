@@ -1134,3 +1134,237 @@
 - **Compilación**: `./gradlew :app:build` → BUILD SUCCESSFUL (12/12 tasks).
 - **Tests**: 18/18 exitosos.
 - **Archivos modificados**: `model/Vehiculo.java`, `model/Jugador.java`, `model/Pista.java`, `engine/Simulador.java`, `ai/Poblacion.java`, `view/GraficoEntrenamiento.java`, tests.
+
+---
+
+## 2026-05-17 - HOTFIX: Fixes Precisos (Muerte Instantánea, Doble Mutación, Selección, Persistencia)
+
+### Bug 1 — Muerte instantánea por artifacts JPEG en la meta
+
+- **Causa raíz**: `pista.png` (JPEG estirado 1536×1024→800×600 con filtro bilinear) produce sangrado de píxeles rojos (meta) cerca del spawn azul. `sensoresDetectanMetaCerca()` detecta estos falsos positivos, impidiendo que `encontrarSpawnConMargen()` valide posiciones. En `Vehiculo.update()`, el sensor detecta rojo a ~2px → `dist = 2/300 = 0.0067 < 0.01` → `metaDetectada = true` → vehículo se detiene en frame 1.
+
+### Fix 1: Grace period de 30 frames (`model/Vehiculo.java`)
+
+- **Campo `framesVivo`**: Nuevo contador de frames de vida del vehículo.
+- **Inicialización**: `this.framesVivo = 0` en constructor y en `reset()`.
+- **Incremento**: `framesVivo++` al inicio de `update()`.
+- **Condición de gracia**: En la detección de meta se añade `&& framesVivo > 30` (0.5s a 60fps), tiempo suficiente para que el vehículo se aleje del área de spawn donde están los artifacts JPEG.
+
+### Fix 2: `esSpawnSeguro()` simplificado (`engine/Simulador.java`)
+
+- Eliminado el bug lógico del loop de márgenes: `sensoresDetectanMetaCerca()` no depende del margen, por lo que si retorna `true` una vez, retorna `true` en todas las iteraciones.
+- Nuevo método solo verifica colisión con paredes (`hayColisionEnTrayecto`). La detección de meta ya está protegida por el grace period de 30 frames en `Vehiculo`.
+
+### Bug 2 — IA no aprende
+
+- **Causa A**: Los mismos JPEG artifacts matan los vehículos de entrenamiento en frame 1-2 → fitness uniforme ≈0 → selección por ruleta colapsa.
+- **Causa B**: `Poblacion.crossover()` muta los hijos DOS veces (dentro de `crossover()` y luego en `mutacion()`).
+- **Causa C**: Ruleta con fitness uniformes siempre retorna `vehiculos.get(0)`.
+
+### Fix 3: Eliminar mutación duplicada (`ai/Poblacion.java`)
+
+- Eliminada línea `redHijo.mutar(0.1);` dentro de `crossover()`. La mutación ahora solo se aplica en `mutacion()` justo después, evitando probabilidad real de 19% (vs 10% esperado).
+
+### Fix 4: Selección por torneo (`ai/Poblacion.java`)
+
+- Reemplazada ruleta de fitness por torneo de tamaño 3. Funciona correctamente incluso con fitness uniformes porque introduce aleatoriedad real (3 candidatos aleatorios, elige el mejor).
+
+### Bug 3 — Persistencia de red neuronal
+
+- **Causa**: El bloque estático de `GestorRed` usaba `new File("app").exists()` que depende del directorio de trabajo, pudiendo guardar en un lugar y buscar en otro.
+
+### Fix 5: Resolución robusta de ruta (`ai/GestorRed.java`)
+
+- Nuevo bloque `static {}` que prueba rutas candidatas en orden de preferencia:
+  1. Si el archivo ya existe en alguna ruta conocida → usa esa ruta.
+  2. Si el directorio padre existe (se puede escribir) → usa esa ruta.
+  3. Fallback a `~/.simulador_ia/mejor_red.json` (siempre funciona).
+
+### Archivos modificados
+
+| Archivo | Cambio | Bug que resuelve |
+|---|---|---|
+| `model/Vehiculo.java` | Campo `framesVivo`, incremento en `update()`, condición `&& framesVivo > 30`, reset | Muerte instantánea (principal) + IA no aprende (secundario) |
+| `engine/Simulador.java` | `esSpawnSeguro()` solo verifica paredes, no meta | Muerte instantánea (elimina bug lógico del loop de márgenes) |
+| `ai/Poblacion.java` | Eliminar `redHijo.mutar(0.1)` en `crossover()` | IA no aprende (doble mutación destruye buenas soluciones) |
+| `ai/Poblacion.java` | Reemplazar ruleta por torneo en `seleccionarPadre()` | IA no aprende (selección colapsa con fitness uniformes) |
+| `ai/GestorRed.java` | Resolución robusta de ruta para `mejor_red.json` | Persistencia de memoria de la IA entre sesiones |
+
+---
+
+## 2026-05-17 - HOTFIX: Colisión de Pared en Frame 1, Spawns Separados y Validación de Bounding Box
+
+### Bug 4 — Colisión de pared en frame 1 (no cubierto por grace period anterior)
+
+- **Causa raíz**: El grace period `framesVivo > 30` solo protegía contra detección de META. `chocaPared()` no tenía ningún grace period. El vehículo en (36, 411) con bounding box 40×20px tiene borde derecho en x=76. En el primer `update()`, intenta moverse 0.5px → `hayColisionEnTrayecto` detecta x=76 como pared → `vivo = false` en frame 1.
+
+### Fix 6: Grace period de 5 frames para colisión de pared (`model/Vehiculo.java`)
+
+- Añadido `framesVivo > 5 &&` antes de `chocaPared()`:
+  ```java
+  if (framesVivo > 5 && chocaPared(x, y, nuevoX, nuevoY)) {
+  ```
+- **Por qué 5**: 5 frames a velocidad 0.5 = 2.5px de movimiento. Suficiente para escapar de overlap menor con bordes de spawn, sin permitir atravesar paredes reales.
+
+### Bug 5 — IA y jugador en la misma posición exacta
+
+- **Causa raíz**: La lógica de fallback para spawn de IA (`cx - 60`, luego `cx - 20`) siempre terminaba en el mismo punto que el jugador cuando el offset `cx + 20` fallaba, porque ambos compartían los mismos candidatos de respaldo.
+
+### Fix 7: `calcularSpawnsSeparados()` (`engine/Simulador.java`)
+
+- Nuevo método que prueba múltiples candidatos independientes para jugador e IA, maximizando separación.
+- **Jugador**: Prueba offsets en Y primero, luego X: `(cx-20, cy-10)`, `(cx-20, cy)`, `(cx-20, cy+10)`, `(cx, cy-10)`, etc.
+- **IA**: Prueba en orden inverso de X para maximizar separación: `(cx+20, cy-10)`, `(cx+20, cy)`, `(cx+40, cy-10)`, `(cx-60, cy-10)`, etc. Además exige `Math.abs(c[0] - jx) > 10` para evitar superposición.
+- Reemplazado el bloque de cálculo de spawns tanto en `iniciarCarrera()` como en `reiniciarCarrera()`.
+
+### Bug 6 — Spawn inválido por falta de validación de bounding box completo
+
+- **Causa raíz**: `encontrarSpawnConMargen()` verificaba solo movimiento horizontal (`hayColisionEnTrayecto` con margen pequeño), pero no validaba que los 4 vértices del vehículo en la posición inicial fueran transitables. Además, `sensoresDetectanMetaCerca()` bloqueaba todos los candidatos por los JPEG artifacts (el bug original).
+
+### Fix 8: `cabeVehiculoEn()` en `encontrarSpawnConMargen()` (`model/Pista.java`)
+
+- Reemplazado `!sensoresDetectanMetaCerca(vx, vy)` por `cabeVehiculoEn(vx, vy, 40, 20)` en ambos puntos de retorno del método.
+- **Primer return**: Valida que el vehículo completo quepa en la posición antes de retornar.
+- **Segundo return** (loop de dx/sign): Misma validación con `cabeVehiculoEn`.
+- Eliminado `sensoresDetectanMetaCerca` de ambos puntos (el grace period en Vehiculo lo hace innecesario).
+
+### Archivos modificados (acumulado)
+
+| Archivo | Cambios acumulados |
+|---|---|
+| `model/Vehiculo.java` | Campo `framesVivo`, incremento en `update()`, `&& framesVivo > 30` para META, `&& framesVivo > 5` para PARED, reset en constructor y `reset()` |
+| `engine/Simulador.java` | `esSpawnSeguro()` simplificado, nuevo `calcularSpawnsSeparados()`, refactor `iniciarCarrera()` y `reiniciarCarrera()` |
+| `ai/Poblacion.java` | Eliminada mutación duplicada en `crossover()`, ruleta → torneo en `seleccionarPadre()` |
+| `ai/GestorRed.java` | Resolución robusta de ruta con 3 candidatos + fallback a `~/.simulador_ia/` |
+| `model/Pista.java` | `cabeVehiculoEn()` en `encontrarSpawnConMargen()`, eliminado `sensoresDetectanMetaCerca` del spawn |
+
+---
+
+## 2026-05-17 - HOTFIX: Ángulo de Spawn (Corredor Vertical)
+
+### Bug 7 — Vehículo spawn apuntando a la derecha en corredor vertical
+
+- **Causa raíz**: El spawn en (36, 411) está en un corredor que sube VERTICALMENTE, pero todos los vehículos se creaban con `angulo=0` (apuntando a la DERECHA). En el primer frame, el vehículo se lanzaba contra la pared lateral derecha del corredor. El grace period de 5 frames para paredes no era suficiente porque el vehículo avanzaba ~3px en 5 frames, directamente contra la pared.
+
+### Fix 9: Detección de ángulo óptimo de spawn (`model/Pista.java`)
+
+- Nuevo método `detectarAnguloInicial(vx, vy)`: mide espacio libre en 4 direcciones (0, π/2, π, -π/2) desde el centro del vehículo, hasta 80px. Retorna la dirección con mayor distancia transitable.
+- Para el spawn en (36, 411), detecta que hacia arriba (`-π/2`) tiene 80px libres vs ~2px hacia la derecha.
+
+### Fix 10: Integración en `calcularSpawnsSeparados()` (`engine/Simulador.java`)
+
+- `calcularSpawnsSeparados()` ahora retorna `[jx, jy, ix, iy, anguloJugador, anguloIA]` usando `pista.detectarAnguloInicial()`.
+- `iniciarCarrera()` y `reiniciarCarrera()`: extraen los ángulos y los aplican:
+  - `jugador.getVehiculo().setAngulo(anguloJugador)`
+  - `iaVehiculo.setAngulo(anguloIA)` y `iaVehiculo.reset(..., anguloIA)`
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---|---|
+| `model/Pista.java` | Nuevo `detectarAnguloInicial()`: mide espacio libre en 4 direcciones, retorna la óptima |
+| `engine/Simulador.java` | `calcularSpawnsSeparados()` retorna ángulos; `iniciarCarrera()` y `reiniciarCarrera()` los aplican |
+
+---
+
+## 2026-05-17 - HOTFIX: Auto-Avance Humano, Fitness de Rotación y Evaluación Genética
+
+### Bug 8 — Auto-avance incondicional para el jugador humano
+
+- **Causa raíz**: `velocidad += aceleracion + 0.1` se aplicaba SIEMPRE, incluso cuando el controlador es humano. El `+0.1` es necesario para la IA (que necesita impulso base para explorar), pero el jugador humano se movía sin presionar teclas.
+- **Fix**: Separada la lógica: si hay `controladorIA`, se aplica `+0.1`; si es humano, solo `aceleracion` con clamp a 0 (sin retroceso involuntario).
+
+### Bug 9 — Penalización de rotación mata el aprendizaje de la IA
+
+- **Causa raíz**: `fitness = distanciaAvance + (velocidad * 10) - (rotacionAcumulada * 0.3)`. La pista tiene curvas de 90° obligatorias. Un vehículo que gira para tomar la curva recibe MENOS fitness que uno que va recto contra la pared. La evolución selecciona "ir recto hasta morir".
+- **Fix**: Nueva fórmula `fitness = distanciaAvance + (velocidad * 5)` sin penalización por rotación.
+
+### Bug 10 — `evaluarFitness()` sobrescribe el fitness real con `distanciaRecorrida`
+
+- **Causa raíz**: `v.setFitness(v.getDistanciaRecorrida())` en `evaluarFitness()` reemplazaba el fitness calculado en `Vehiculo.update()` (basado en `distanciaAvance` + velocidad) por `distanciaRecorrida` (distancia total acumulada, que premia dar círculos).
+- **Fix**: `evaluarFitness()` ahora solo ordena por el fitness ya calculado en `update()`. El fitness real (progreso lineal desde spawn) guía la evolución.
+
+### Bug 11 — `guardarRed` se ejecutaba antes de ordenar
+
+- **Causa raíz**: El orden era `evaluarFitness()` → `if (record)` → `vehiculos.get(0)`. Pero `evaluarFitness()` sobrescribía el fitness con `distanciaRecorrida` y no ordenaba por el fitness real. Con el fix de `evaluarFitness()`, ahora solo ordena, y `vehiculos.get(0)` es correctamente el mejor.
+- **Fix**: No requirió cambio de código (el orden ya era correcto), solo la corrección de `evaluarFitness()` para que efectivamente ordene por el fitness real.
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---|---|
+| `model/Vehiculo.java` | Separada aceleración humano/IA; fitness sin penalización de rotación |
+| `ai/Poblacion.java` | `evaluarFitness()` ya no sobrescribe fitness, solo ordena |
+| `model/Pista.java` | `detectarAnguloInicial()` verifica dirección opuesta cuando ambas son viables |
+
+---
+
+## 2026-05-17 - HOTFIX: `detectarAnguloInicial` con Bounding Box Completo
+
+### Bug 12 — Ángulo de spawn incorrecto por medir solo el píxel central
+
+- **Causa raíz**: `detectarAnguloInicial()` medía espacio libre con un solo píxel en el centro del vehículo (`vx+20, vy+10`). El vehículo mide 40×20px. Un corredor que parece libre en el centro puede tener paredes en los bordes laterales del vehículo. Resultado: elegía "abajo" o "derecha" aunque el vehículo completo no cupiera.
+- **Fix**: Reemplazado el método completo para usar `cabeVehiculoEn(nx, ny, 40, 20)` que verifica los **4 vértices** del vehículo en cada paso:
+  - Parte desde `(vx, vy)` sin offset
+  - Mide hasta 150px en cada dirección
+  - Usa `cabeVehiculoEn` que chequea transitabilidad de los 4 puntos extremos del bounding box
+  - Eliminada la verificación de dirección opuesta (innecesaria con bounding box real)
+  - Para jugador en (36,411): "arriba" → 150px libres; "abajo" → bloquea inmediatamente (borde lateral choca)
+  - Para IA en (86,411): "arriba" → 150px libres; "derecha" → bloquea a 26px (pared lateral)
+
+---
+
+## 2026-05-17 - HOTFIX DEFINITIVO: Población y Spawn IA
+
+### Bug 13 — Población de entrenamiento siempre con `angulo=0` (derecha)
+
+- **Causa raíz**: `Poblacion.java` tenía `setAngulo(0)` hardcodeado en 4 lugares, y en `crearPoblacion()` ni siquiera tenía `setAngulo`. El método `detectarAnguloInicial` nunca se llamaba durante el entrenamiento. Todos los vehículos de entrenamiento arrancaban apuntando a la derecha en un corredor vertical → chocaban inmediato.
+- **Fix**: Reemplazados todos los `setAngulo(0)` por `setAngulo(-Math.PI / 2)` en:
+  - `crearPoblacion()` (nueva línea agregada)
+  - `crearPoblacionConRed()` (elite y loop)
+  - `crossover()` (elite y loop)
+
+### Bug 14 — IA spawn en zona negra y ángulo incorrecto
+
+- **Causa raíz**: Los candidatos IA en `calcularSpawnsSeparados()` usaban `cx+20` = x=86, donde el borde derecho (x=126) tocaba la pared. Además `detectarAnguloInicial` con bounding box fallaba porque el corredor en x=86 es muy angosto para 40px de ancho.
+- **Fix**: Candidatos IA ahora usan la misma X que el jugador pero desplazados hacia arriba en Y (en el corredor validado): `{jx, jy-35}`, `{jx, jy-50}`, `{jx, jy-25}`, etc.
+- Distancia de separación cambiada de `Math.abs(x) > 10` a distancia euclidiana `sqrt(dx²+dy²) > 20`.
+
+### Bug 15 — `detectarAnguloInicial` hardcodeado
+
+- **Causa raíz**: El bounding box de 40px es demasiado ancho para algunos segmentos del corredor. La detección dinámica fallaba para posiciones como (86, 411).
+- **Fix**: El track es fijo (siempre sube hacia arriba desde el spawn). `detectarAnguloInicial` retorna `-Math.PI / 2` directamente.
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---|---|
+| `model/Pista.java` | `detectarAnguloInicial` hardcodeado a `-π/2` |
+| `ai/Poblacion.java` | 5x `setAngulo(0)` → `setAngulo(-π/2)` |
+| `engine/Simulador.java` | Candidatos IA en misma X que jugador, distancia euclidiana |
+
+---
+
+## 2026-05-17 - HOTFIX: Fitness Acumulativo, Mutación Controlada y Top 3 Elites
+
+### Bug 16 — Fitness con distancia Euclidiana se reduce en curvas
+
+- **Causa raíz**: `distanciaAvance = sqrt((x-startX)² + (y-startY)²)` mide línea recta desde el spawn. Cuando el vehículo toma una curva que lo acerca temporalmente al spawn (por ejemplo, rodeando el circuito), su distancia Euclidiana DISMINUYE aunque esté avanzando por la pista. La evolución aprende activamente a NO tomar curvas.
+- **Fix**: Fitness usa `distanciaRecorrida` (distancia total acumulada) que siempre crece al avanzar, sin importar la dirección. El anti-spin también cambia a `distanciaRecorrida < 50` (mata a los que giran sin avanzar realmente).
+
+### Bug 17 — Mutación al 40% destruye la población
+
+- **Causa raíz**: Cuando `generacionesEstancadas > 5` la mutación subía a 0.4. Con 44 pesos en la red (5×4 + 4×2), esto mutaba ~17 pesos por individuo, colapsando toda la población. El fitness caía a cero y nunca se recuperaba.
+- **Fix**: Tasa máxima reducida a 0.15. En lugar de mutar agresivamente, si hay estancamiento >15 generaciones se inyectan 5 individuos con redes aleatorias frescas (inyección de diversidad). El contador de estancamiento se resetea para dar oportunidad a los nuevos.
+
+### Bug 18 — Solo 1 elite preservado por generación
+
+- **Causa raíz**: `crossover()` preservaba solo al mejor individuo (índice 0). Con 50 individuos y solo 1 elite, la buena información genética se perdía rápidamente en cada generación.
+- **Fix**: `crossover()` ahora preserva el top 3 sin mutación. `mutacion()` empieza en índice 3 para no tocar elites.
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---|---|
+| `model/Vehiculo.java` | Fitness con `distanciaRecorrida` en lugar de `distanciaAvance` |
+| `ai/Poblacion.java` | Mutación máx 0.15 + inyección aleatoria + top 3 elites; `mutacion()` empieza en índice 3 |

@@ -1,0 +1,9 @@
+{
+  "timestamp": "2026-05-17T17:31:31.816514558",
+  "resultado": "GANASTE!",
+  "distanciaJugador": 65.1,
+  "distanciaIA": 25.34,
+  "metaJugador": false,
+  "metaIA": false,
+  "framesDuracion": 31
+}

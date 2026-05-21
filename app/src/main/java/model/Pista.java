@@ -58,6 +58,25 @@ public class Pista {
         return c.getBlue() > 0.5 && c.getRed() < 0.5 && c.getGreen() < 0.5;
     }
 
+    public boolean sensoresDetectanMetaCerca(double vx, double vy) {
+        double[] angulos = {-90, -45, 0, 45, 90};
+        for (double anguloRel : angulos) {
+            double anguloRad = Math.toRadians(anguloRel);
+            double dx = Math.cos(anguloRad) * 2;
+            double dy = Math.sin(anguloRad) * 2;
+            double px = vx;
+            double py = vy;
+            for (int paso = 0; paso < 2; paso++) {
+                px += dx;
+                py += dy;
+                if (dentroLimites(px, py) && esMeta(px, py)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     public boolean esTransitable(double x, double y) {
         return dentroLimites(x, y) && !esPared(x, y);
     }
@@ -82,6 +101,13 @@ public class Pista {
             }
         }
         return false;
+    }
+
+    public boolean cabeVehiculoEn(double x, double y, double anchoV, double altoV) {
+        return esTransitable(x, y) &&
+               esTransitable(x + anchoV, y) &&
+               esTransitable(x, y + altoV) &&
+               esTransitable(x + anchoV, y + altoV);
     }
 
     public double[] encontrarSpawnPoint() {
@@ -109,12 +135,60 @@ public class Pista {
 
         if (count == 0) return new double[]{400.0, 500.0};
 
+        double[] margenes = {10.0, 5.0, 3.0, 1.0, 0.6};
+        for (double margen : margenes) {
+            double[] resultado = encontrarSpawnConMargen(spawnX, spawnY, margen);
+            if (resultado != null) return resultado;
+        }
+
         int left = spawnX;
         while (left > 0 && !esPared(left - 1, spawnY)) left--;
         int right = spawnX;
         while (right < (int) ancho - 1 && !esPared(right + 1, spawnY)) right++;
 
-        double centerX = (left + right) / 2.0;
+        double centerX = Math.round((left + right) / 2.0);
+
         return new double[]{centerX, (double) spawnY};
+    }
+
+    public double detectarAnguloInicial(double vx, double vy) {
+        return -Math.PI / 2;
+    }
+
+    private double[] encontrarSpawnConMargen(int spawnX, int spawnY, double margen) {
+        int[] candidatosY = {0, -5, 5, -10, 10, -15, 15, -20, 20};
+        for (int dy : candidatosY) {
+            int y = spawnY + dy;
+            if (y - 10 < 0 || y + 10 >= (int) alto) continue;
+
+            int left = spawnX;
+            while (left > 0 && !esPared(left - 1, y)) left--;
+            int right = spawnX;
+            while (right < (int) ancho - 1 && !esPared(right + 1, y)) right++;
+
+            if (right - left < 40) continue;
+
+            double centerX = Math.round((left + right) / 2.0);
+            double vx = centerX - 20;
+            double vy = y - 10;
+
+            if (cabeVehiculoEn(vx, vy, 40, 20) &&
+                !hayColisionEnTrayecto(vx, vy, vx + margen, vy, 40, 20)) {
+                return new double[]{centerX, (double) y};
+            }
+
+            for (int dx = 10; dx <= 30; dx += 10) {
+                for (int sign : new int[]{-1, 1}) {
+                    double testCx = centerX + sign * dx;
+                    double testVx = testCx - 20;
+                    if (testVx >= left && testVx + 40 <= right &&
+                        cabeVehiculoEn(testVx, vy, 40, 20) &&
+                        !hayColisionEnTrayecto(testVx, vy, testVx + margen, vy, 40, 20)) {
+                        return new double[]{testCx, (double) y};
+                    }
+                }
+            }
+        }
+        return null;
     }
 }
